@@ -3,8 +3,8 @@ import { Pressable, Text, View, type PressableStateCallbackType } from "react-na
 import { StyleSheet } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import { AdaptiveModalSheet } from "@/components/adaptive-modal-sheet";
-import { useSessionStore } from "@/stores/session-store";
 import type { PlannedTarget } from "./model";
+import { describeWorkspace, useAllWorkspaces } from "./workspaces";
 
 /**
  * Picks a place to plan a draft for. Both grains are offered because the case a
@@ -49,32 +49,30 @@ export function PlanSheet({
   onSelect: (target: PlannedTarget) => void;
 }) {
   const { t } = useTranslation();
-  const sessions = useSessionStore((state) => state.sessions);
+  const workspaces = useAllWorkspaces();
 
   const options = useMemo<PlanOption[]>(() => {
     const rows: PlanOption[] = [];
     const seenProjects = new Set<string>();
-    for (const session of Object.values(sessions)) {
-      for (const workspace of Object.values(session.workspaces ?? {})) {
-        if (!seenProjects.has(workspace.projectId)) {
-          seenProjects.add(workspace.projectId);
-          rows.push({
-            key: `project:${workspace.projectId}`,
-            target: { kind: "project", projectId: workspace.projectId },
-            title: `◆ ${workspace.projectDisplayName}`,
-            subtitle: t("drafts.plan.projectSubtitle"),
-          });
-        }
+    for (const workspace of workspaces) {
+      if (!seenProjects.has(workspace.projectId)) {
+        seenProjects.add(workspace.projectId);
         rows.push({
-          key: `workspace:${workspace.id}`,
-          target: { kind: "workspace", workspaceId: workspace.id },
-          title: `▣ ${workspace.projectDisplayName} · ${workspace.name}`,
-          subtitle: workspace.workspaceDirectory,
+          key: `project:${workspace.projectId}`,
+          target: { kind: "project", projectId: workspace.projectId },
+          title: `◆ ${workspace.projectDisplayName}`,
+          subtitle: t("drafts.plan.projectSubtitle"),
         });
       }
+      rows.push({
+        key: `workspace:${workspace.id}`,
+        target: { kind: "workspace", workspaceId: workspace.id },
+        title: `▣ ${describeWorkspace(workspace)}`,
+        subtitle: workspace.workspaceDirectory,
+      });
     }
     return rows;
-  }, [sessions, t]);
+  }, [workspaces, t]);
 
   const header = useMemo(
     () => ({ title: t("drafts.plan.title"), subtitle: t("drafts.plan.subtitle") }),

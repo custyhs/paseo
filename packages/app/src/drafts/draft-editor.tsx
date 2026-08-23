@@ -3,7 +3,6 @@ import { Pressable, ScrollView, Text, View, type PressableStateCallbackType } fr
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import { EditingTextInput } from "@/components/ui/text-input";
-import { useSessionStore } from "@/stores/session-store";
 import { useDraftsSource } from "./context";
 import {
   draftDisplayTitle,
@@ -12,6 +11,7 @@ import {
   type PlannedTarget,
 } from "./model";
 import { PlanSheet } from "./plan-sheet";
+import { describeWorkspace, useAllWorkspaces } from "./workspaces";
 import { SendSheet } from "./send-sheet";
 import { SnapshotSheet } from "./snapshot-sheet";
 import type { SendTarget } from "./source";
@@ -40,22 +40,20 @@ function sendButtonStyle({ pressed: isPressed }: PressableStateCallbackType) {
 }
 
 function usePlannedLabel(): (target: PlannedTarget) => string {
-  const sessions = useSessionStore((state) => state.sessions);
+  const workspaces = useAllWorkspaces();
   return useCallback(
     (target: PlannedTarget) => {
-      for (const session of Object.values(sessions)) {
-        for (const workspace of Object.values(session.workspaces ?? {})) {
-          if (target.kind === "workspace" && workspace.id === target.workspaceId) {
-            return `${workspace.projectDisplayName} · ${workspace.name}`;
-          }
-          if (target.kind === "project" && workspace.projectId === target.projectId) {
-            return workspace.projectDisplayName;
-          }
+      for (const workspace of workspaces) {
+        if (target.kind === "workspace" && workspace.id === target.workspaceId) {
+          return describeWorkspace(workspace);
+        }
+        if (target.kind === "project" && workspace.projectId === target.projectId) {
+          return workspace.projectDisplayName;
         }
       }
       return target.kind === "workspace" ? target.workspaceId : target.projectId;
     },
-    [sessions],
+    [workspaces],
   );
 }
 

@@ -877,6 +877,7 @@ function AppWithSidebar({ children }: { children: ReactNode }) {
     storeReady &&
     (pathname === "/open-project" ||
       pathname === "/new" ||
+      pathname === "/drafts" ||
       pathname === "/sessions" ||
       pathname === "/schedules" ||
       routeHasKnownHost);

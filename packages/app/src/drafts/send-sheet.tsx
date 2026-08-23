@@ -3,8 +3,8 @@ import { Pressable, Text, View, type PressableStateCallbackType } from "react-na
 import { StyleSheet } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import { AdaptiveModalSheet } from "@/components/adaptive-modal-sheet";
-import { useSessionStore } from "@/stores/session-store";
 import type { ArtifactDetail } from "./model";
+import { describeWorkspace, useServerAgents, useServerWorkspaces } from "./workspaces";
 import type { SendTarget } from "./source";
 
 /**
@@ -61,11 +61,10 @@ export function SendSheet({
   onSend: (target: SendTarget) => void;
 }) {
   const { t } = useTranslation();
-  const workspaces = useSessionStore((state) => state.sessions[serverId]?.workspaces);
-  const agents = useSessionStore((state) => state.sessions[serverId]?.agents);
+  const workspaces = useServerWorkspaces(serverId);
+  const agents = useServerAgents(serverId);
 
   const options = useMemo<TargetOption[]>(() => {
-    const all = Object.values(workspaces ?? {});
     const plannedWorkspaceIds = new Set(
       artifact.planned
         .filter((target) => target.kind === "workspace")
@@ -84,9 +83,9 @@ export function SendSheet({
     };
 
     const rows: Array<TargetOption & { rank: number }> = [];
-    for (const workspace of all) {
+    for (const workspace of workspaces) {
       const workspaceRank = rank(workspace.id, workspace.projectId);
-      const where = `${workspace.projectDisplayName} · ${workspace.name}`;
+      const where = describeWorkspace(workspace);
       rows.push({
         rank: workspaceRank,
         key: `new:${workspace.id}`,
@@ -95,7 +94,7 @@ export function SendSheet({
         subtitle: t("drafts.send.newAgentSubtitle"),
         isPlanned: workspaceRank < 2,
       });
-      for (const agent of Object.values(agents ?? {})) {
+      for (const agent of agents) {
         if (agent.workspaceId !== workspace.id) continue;
         rows.push({
           rank: workspaceRank,

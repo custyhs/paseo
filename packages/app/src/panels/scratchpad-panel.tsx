@@ -7,6 +7,7 @@ import invariant from "tiny-invariant";
 import { usePaneContext } from "@/panels/pane-context";
 import type { PanelRegistration } from "@/panels/panel-registry";
 import { useAllDrafts, useDraftsSource } from "@/drafts/context";
+import { useWorkspaceProjectLookup } from "@/drafts/workspaces";
 import { DraftEditor } from "@/drafts/draft-editor";
 import {
   dispatchesInto,
@@ -16,7 +17,6 @@ import {
   type ArtifactDetail,
   type WorkspaceProjectLookup,
 } from "@/drafts/model";
-import { useSessionStore } from "@/stores/session-store";
 
 const ThemedNotebookPen = withUnistyles(NotebookPen);
 
@@ -30,24 +30,6 @@ function useScratchpadDescriptor() {
     icon: ThemedNotebookPen,
     statusBucket: null,
   };
-}
-
-/**
- * Resolves a workspace to its project so a project-level plan can surface in
- * every workspace of that project — which is the case the plan exists for: when
- * the draft was written, the worktree it is meant for did not exist yet.
- */
-function useWorkspaceProjectLookup(serverId: string): WorkspaceProjectLookup {
-  const workspaces = useSessionStore((state) => state.sessions[serverId]?.workspaces);
-  return useMemo(() => {
-    // The map is keyed by an internal identity, not by workspace id, so index by
-    // the descriptor's own id rather than depending on that key format.
-    const byId = new Map<string, string>();
-    for (const workspace of Object.values(workspaces ?? {})) {
-      byId.set(workspace.id, workspace.projectId);
-    }
-    return { projectIdForWorkspace: (workspaceId: string) => byId.get(workspaceId) ?? null };
-  }, [workspaces]);
 }
 
 const DraftRow = memo(function DraftRow({
@@ -144,7 +126,7 @@ function ScratchpadPanel() {
 
   const source = useDraftsSource(workspaceId);
   const { artifacts } = useAllDrafts(source);
-  const lookup = useWorkspaceProjectLookup(serverId);
+  const lookup = useWorkspaceProjectLookup();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 

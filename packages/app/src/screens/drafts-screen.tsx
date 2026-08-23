@@ -7,6 +7,7 @@ import { SearchField } from "@/components/ui/search-field";
 import { useAllDrafts, useDraftsSource } from "@/drafts/context";
 import { DraftEditor } from "@/drafts/draft-editor";
 import { draftDisplayTitle, plannedTargetKey, type ArtifactDetail } from "@/drafts/model";
+import { describeWorkspace, useAllWorkspaces } from "@/drafts/workspaces";
 import { useSessionStore } from "@/stores/session-store";
 import { useIsCompactFormFactor } from "@/constants/layout";
 
@@ -95,6 +96,7 @@ export function DraftsScreen() {
   const { t } = useTranslation();
   const isCompact = useIsCompactFormFactor();
   const sessions = useSessionStore((state) => state.sessions);
+  const workspaces = useAllWorkspaces();
   const serverId = useMemo(() => Object.keys(sessions)[0] ?? "", [sessions]);
   const source = useDraftsSource();
   const { artifacts } = useAllDrafts(source);
@@ -104,19 +106,17 @@ export function DraftsScreen() {
   const labelFor = useCallback(
     (artifact: ArtifactDetail) =>
       artifact.planned.map((target) => {
-        for (const session of Object.values(sessions)) {
-          for (const workspace of Object.values(session.workspaces ?? {})) {
-            if (target.kind === "workspace" && workspace.id === target.workspaceId) {
-              return `${workspace.projectDisplayName} · ${workspace.name}`;
-            }
-            if (target.kind === "project" && workspace.projectId === target.projectId) {
-              return workspace.projectDisplayName;
-            }
+        for (const workspace of workspaces) {
+          if (target.kind === "workspace" && workspace.id === target.workspaceId) {
+            return describeWorkspace(workspace);
+          }
+          if (target.kind === "project" && workspace.projectId === target.projectId) {
+            return workspace.projectDisplayName;
           }
         }
         return plannedTargetKey(target);
       }),
-    [sessions],
+    [workspaces],
   );
 
   const groups = useMemo(() => {
