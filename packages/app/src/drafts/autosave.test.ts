@@ -29,6 +29,46 @@ async function attemptWrite(input: {
   }
 }
 
+/**
+ * Mirrors the editor's debounce: a pause earns a write, a keystroke does not.
+ * `version` is the optimistic-concurrency token, so one write per character
+ * makes it climb by hundreds while typing a paragraph.
+ */
+function debouncingWriter(
+  source: MockDraftsSource,
+  artifactId: string,
+  startVersion: number,
+  quietMs: number,
+) {
+  let version = startVersion;
+  let latest: string | null = null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let chain: Promise<void> = Promise.resolve();
+
+  const write = async () => {
+    if (latest === null) return;
+    const body = latest;
+    latest = null;
+    const saved = await source.update({ artifactId, baseVersion: version, body });
+    version = saved.version;
+  };
+
+  return {
+    type(next: string) {
+      latest = next;
+      if (timer !== null) clearTimeout(timer);
+      timer = setTimeout(() => {
+        timer = null;
+        chain = chain.then(write);
+      }, quietMs);
+    },
+    async settle() {
+      await new Promise((resolve) => setTimeout(resolve, quietMs * 3));
+      await chain;
+    },
+  };
+}
+
 /** Mirrors the editor: newest text wins, one write in flight, version carried forward. */
 function coalescingWriter(source: MockDraftsSource, artifactId: string, startVersion: number) {
   let version = startVersion;
@@ -101,6 +141,35 @@ describe("autosave under rapid typing", () => {
     // Five keystrokes, fewer writes: the first goes out immediately and the rest
     // collapse into follow-ups that each carry the newest text at the time.
     expect(saved?.version).toBeLessThan(created.version + 5);
+  });
+
+  test("typing a word bumps the version once, not once per character", async () => {
+    const source = new MockDraftsSource();
+    const created = await source.create();
+    const writer = debouncingWriter(source, created.id, created.version, 20);
+
+    for (const body of ["i", "in", "inc", "incr", "increm", "increment"]) writer.type(body);
+    await writer.settle();
+
+    const saved = await source.get(created.id);
+    expect(saved?.body).toBe("increment");
+    // Nine keystrokes, one pause, one write.
+    expect(saved?.version).toBe(created.version + 1);
+  });
+
+  test("a pause between words earns a second write", async () => {
+    const source = new MockDraftsSource();
+    const created = await source.create();
+    const writer = debouncingWriter(source, created.id, created.version, 20);
+
+    writer.type("first");
+    await writer.settle();
+    writer.type("first second");
+    await writer.settle();
+
+    const saved = await source.get(created.id);
+    expect(saved?.body).toBe("first second");
+    expect(saved?.version).toBe(created.version + 2);
   });
 
   test("a conflict from another client is surfaced, not swallowed", async () => {

@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View, type PressableStateCallbackType } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
@@ -15,6 +15,9 @@ import { PlanSheet } from "./plan-sheet";
 import { SendSheet } from "./send-sheet";
 import { SnapshotSheet } from "./snapshot-sheet";
 import type { SendTarget } from "./source";
+
+/** Matches `DRAFT_PERSIST_INTERVAL_MS`, the composer's own checkpoint cadence. */
+const DRAFT_WRITE_DEBOUNCE_MS = 200;
 
 const ThemedTextInput = withUnistyles(EditingTextInput, (theme) => ({
   placeholderTextColor: theme.colors.foregroundMuted,
@@ -123,6 +126,7 @@ export function DraftEditor({
   const versionRef = useRef(artifact.version);
   const latestTextRef = useRef<string | null>(null);
   const inFlightRef = useRef(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Writes coalesce behind one in-flight save. One request per keystroke races
   // the optimistic-concurrency check and every write after the first carries a
@@ -148,10 +152,28 @@ export function DraftEditor({
     }
   }, [artifact.id, source]);
 
+  // A pause, not a keystroke, is what earns a write. `version` is the
+  // optimistic-concurrency token, so one write per character makes it climb by
+  // hundreds while typing a paragraph — noise that also buries the numbers that
+  // do mean something, the revisions that were actually sent. The interval
+  // matches the composer's own checkpoint cadence.
   const onChangeText = useCallback(
     (next: string) => {
       latestTextRef.current = next;
-      void flush();
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => {
+        timerRef.current = null;
+        void flush();
+      }, DRAFT_WRITE_DEBOUNCE_MS);
+    },
+    [flush],
+  );
+
+  // A pending edit must not die with the component; flush it on the way out.
+  useEffect(
+    () => () => {
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
+      if (latestTextRef.current !== null) void flush();
     },
     [flush],
   );

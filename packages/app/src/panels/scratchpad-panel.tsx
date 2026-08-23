@@ -80,9 +80,6 @@ const DraftRow = memo(function DraftRow({
         <Text numberOfLines={1} style={styles.rowTitle}>
           {title}
         </Text>
-        <Text style={styles.rowVersion}>
-          {t("drafts.labels.version", { version: artifact.version })}
-        </Text>
       </View>
       <View style={styles.tagRow}>
         <Text style={styles.tag}>

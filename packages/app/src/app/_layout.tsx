@@ -909,6 +909,7 @@ function RootStack() {
         <Stack.Screen name="settings/[section]" />
         <Stack.Screen name="new" />
         <Stack.Screen name="open-project" />
+        <Stack.Screen name="drafts" />
         <Stack.Screen name="sessions" />
         <Stack.Screen name="schedules" />
         <Stack.Screen name="pair-scan" />

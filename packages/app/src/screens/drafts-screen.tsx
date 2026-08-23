@@ -61,9 +61,6 @@ const DraftListRow = memo(function DraftListRow({
         <Text numberOfLines={1} style={styles.rowTitle}>
           {draftDisplayTitle(artifact) ?? t("drafts.labels.untitled")}
         </Text>
-        <Text style={styles.rowVersion}>
-          {t("drafts.labels.version", { version: artifact.version })}
-        </Text>
       </View>
       {snippet ? (
         <Text numberOfLines={1} style={styles.rowSnippet}>
