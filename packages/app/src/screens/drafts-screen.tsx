@@ -158,7 +158,12 @@ export function DraftsScreen() {
           placeholder={t("drafts.list.searchPlaceholder")}
           clearAccessibilityLabel={t("drafts.list.clearSearch")}
         />
-        <Pressable accessibilityRole="button" onPress={onCreate} style={newButtonStyle}>
+        <Pressable
+          accessibilityRole="button"
+          testID="drafts-new-draft"
+          onPress={onCreate}
+          style={newButtonStyle}
+        >
           <Text style={styles.newButtonLabel}>{t("drafts.actions.newDraft")}</Text>
         </Pressable>
       </View>
@@ -206,7 +211,7 @@ export function DraftsScreen() {
   );
 
   return (
-    <View style={styles.container}>
+    <View testID="drafts-screen" style={styles.container}>
       <MenuHeader title={t("drafts.list.title")} />
       <View style={isCompact ? styles.bodyCompact : styles.body}>
         {showList ? list : null}

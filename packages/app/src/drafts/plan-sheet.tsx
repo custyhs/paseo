@@ -32,7 +32,12 @@ const PlanRow = memo(function PlanRow({
 }) {
   const onPress = useCallback(() => onSelect(option.target), [onSelect, option.target]);
   return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={optionStyle}>
+    <Pressable
+      accessibilityRole="button"
+      testID={`plan-option-${option.key}`}
+      onPress={onPress}
+      style={optionStyle}
+    >
       <Text style={styles.optionTitle}>{option.title}</Text>
       <Text style={styles.optionSubtitle}>{option.subtitle}</Text>
     </Pressable>

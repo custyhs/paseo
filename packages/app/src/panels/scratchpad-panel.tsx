@@ -153,12 +153,17 @@ function ScratchpadPanel() {
   const onToggleHistory = useCallback(() => setIsHistoryOpen((open) => !open), []);
 
   return (
-    <View style={styles.container}>
+    <View testID="scratchpad-panel" style={styles.container}>
       <View style={styles.listPane}>
         <View style={styles.sectionHead}>
           <Text style={styles.sectionTitle}>{t("drafts.sections.planned")}</Text>
           <View style={styles.spacer} />
-          <Pressable accessibilityRole="button" onPress={onCreate} style={newButtonStyle}>
+          <Pressable
+            accessibilityRole="button"
+            testID="scratchpad-new-draft"
+            onPress={onCreate}
+            style={newButtonStyle}
+          >
             <Text style={styles.newButtonLabel}>{t("drafts.actions.newDraft")}</Text>
           </Pressable>
         </View>

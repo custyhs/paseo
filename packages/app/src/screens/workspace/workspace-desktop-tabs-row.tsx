@@ -588,7 +588,6 @@ function getFallbackTabLabel(
     changes: string;
     files: string;
     pullRequest: string;
-    scratchpad: string;
   },
 ): string {
   if (tab.target.kind === "new_tab") {
@@ -614,9 +613,6 @@ function getFallbackTabLabel(
   }
   if (tab.target.kind === "pull_request") {
     return labels.pullRequest;
-  }
-  if (tab.target.kind === "scratchpad") {
-    return labels.scratchpad;
   }
   return labels.agent;
 }
@@ -1076,7 +1072,6 @@ function ResolvedWorkspaceDesktopTabsRow({
       changes: t("panels.diff.changesLabel"),
       files: t("panels.files.label"),
       pullRequest: t("panels.pullRequest.label"),
-      scratchpad: t("drafts.panel.label"),
     }),
     [t],
   );

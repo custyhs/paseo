@@ -229,7 +229,7 @@ export function DraftEditor({
   }, [artifact.dispatches]);
 
   return (
-    <View style={styles.container}>
+    <View testID="draft-editor" style={styles.container}>
       <View style={styles.head}>
         <Text numberOfLines={1} style={styles.title}>
           {draftDisplayTitle(artifact) ?? t("drafts.labels.untitled")}
@@ -253,7 +253,12 @@ export function DraftEditor({
             />
           ))
         )}
-        <Pressable accessibilityRole="button" onPress={openPlan} style={addChipStyle}>
+        <Pressable
+          accessibilityRole="button"
+          testID="draft-add-plan"
+          onPress={openPlan}
+          style={addChipStyle}
+        >
           <Text style={styles.chipLabel}>{`+ ${t("drafts.actions.addPlan")}`}</Text>
         </Pressable>
       </View>
