@@ -45,6 +45,16 @@ const ARTIFACT_FILE = "artifact.json";
 const SNAPSHOT_DIR = "snapshots";
 const DISPATCH_FILE = "dispatches.jsonl";
 
+/**
+ * Told about every write, so each connected session can push the record on to
+ * its own client. One artifact per notification: the client holds a full replica
+ * and applies these the way it applies `workspace_update`.
+ */
+export type DraftChangeListener = (change: {
+  artifact: ArtifactRecord;
+  dispatches?: DispatchRecord[];
+}) => void;
+
 export interface CreateArtifactInput {
   title?: string | null;
   body?: string;
@@ -85,6 +95,7 @@ export class DraftStorage {
   private readonly snapshots = new Map<string, Map<number, SnapshotRecord>>();
   private readonly dispatches = new Map<string, DispatchRecord[]>();
   private readonly pendingWrites = new Map<string, Promise<unknown>>();
+  private readonly listeners = new Set<DraftChangeListener>();
   private loadPromise: Promise<void> | null = null;
 
   constructor(baseDir: string, logger: Logger) {
@@ -94,6 +105,31 @@ export class DraftStorage {
 
   async initialize(): Promise<void> {
     await this.load();
+  }
+
+  onChange(listener: DraftChangeListener): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  /** Lineage changed but the record did not; push both so clients stay whole. */
+  private notifyDispatch(artifactId: string): void {
+    const artifact = this.artifacts.get(artifactId);
+    if (!artifact) return;
+    this.notify(artifact, [...(this.dispatches.get(artifactId) ?? [])]);
+  }
+
+  private notify(artifact: ArtifactRecord, dispatches?: DispatchRecord[]): void {
+    for (const listener of this.listeners) {
+      try {
+        listener({ artifact, dispatches });
+      } catch (error) {
+        // One session's emit failing must not stop the others from hearing.
+        this.logger.warn({ error, artifactId: artifact.id }, "Draft change listener failed");
+      }
+    }
   }
 
   // ── reads ────────────────────────────────────────────────────────────────
@@ -141,6 +177,56 @@ export class DraftStorage {
     await this.queue(record.id, async () => {
       await this.writeArtifact(record);
     });
+    this.notify(record);
+    return record;
+  }
+
+  /**
+   * Creates the record when it is not there yet, which is how a client-minted id
+   * first reaches the disk: a draft nobody wrote in never gets created at all,
+   * so discarding one is a non-event rather than a delete the sync layer has to
+   * carry. `baseVersion: 0` is the caller saying "this is a creation".
+   */
+  async upsert(input: {
+    id: string;
+    baseVersion: number;
+    title?: string | null;
+    body?: string;
+    planned?: PlannedTarget[];
+    now?: string;
+  }): Promise<ArtifactRecord> {
+    await this.load();
+    if (this.artifacts.has(input.id)) {
+      return this.update({
+        id: input.id,
+        baseVersion: input.baseVersion,
+        title: input.title,
+        body: input.body,
+        now: input.now,
+      });
+    }
+    if (input.baseVersion !== 0) {
+      throw new ArtifactVersionConflictError({
+        artifactId: input.id,
+        expectedVersion: input.baseVersion,
+        actualVersion: 0,
+      });
+    }
+    const now = input.now ?? new Date().toISOString();
+    const record: ArtifactRecord = {
+      id: input.id,
+      title: input.title ?? null,
+      body: input.body ?? "",
+      version: 1,
+      planned: input.planned ?? [],
+      createdAt: now,
+      updatedAt: now,
+      archivedAt: null,
+    };
+    await this.queue(record.id, async () => {
+      await this.writeArtifact(record);
+    });
+    this.notify(record);
     return record;
   }
 
@@ -221,6 +307,7 @@ export class DraftStorage {
     await this.queue(input.artifactId, async () => {
       await this.appendDispatch(input.artifactId, dispatch);
     });
+    this.notifyDispatch(input.artifactId);
     return dispatch;
   }
 
@@ -253,6 +340,7 @@ export class DraftStorage {
     await this.queue(input.artifactId, async () => {
       await this.appendDispatch(input.artifactId, settled);
     });
+    this.notifyDispatch(input.artifactId);
     return settled;
   }
 
@@ -289,6 +377,7 @@ export class DraftStorage {
       result = next;
     });
     if (!result) throw new ArtifactNotFoundError(artifactId);
+    this.notify(result);
     return result;
   }
 

@@ -132,6 +132,12 @@ import type {
   MutableDaemonConfig,
   MutableDaemonConfigPatch,
 } from "@getpaseo/protocol/messages";
+import type {
+  ArtifactRecord,
+  DispatchRecord,
+  PlannedTarget,
+  SnapshotRecord,
+} from "@getpaseo/protocol/draft/types";
 import { isRelayClientWebSocketUrl } from "@getpaseo/protocol/daemon-endpoints";
 import { terminalSubscriptionKey } from "@getpaseo/protocol/terminal-subscription-key";
 import {
@@ -277,6 +283,11 @@ export type DaemonEvent =
   | {
       type: "project.update";
       payload: Extract<SessionOutboundMessage, { type: "project.update" }>["payload"];
+    }
+  | {
+      type: "draft.artifact_update";
+      artifactId: string;
+      payload: Extract<SessionOutboundMessage, { type: "draft.artifact_update" }>["payload"];
     }
   | {
       type: "workspace_setup_progress";
@@ -5045,6 +5056,118 @@ export class DaemonClient {
     return payload.entries;
   }
 
+  // ── drafts ───────────────────────────────────────────────────────────────
+  // Gate on `server_info.features.drafts` before calling any of these; an older
+  // daemon does not know the domain and there is no fallback path to write.
+
+  async listDraftArtifacts(options?: { includeArchived?: boolean }): Promise<ArtifactRecord[]> {
+    const { artifacts } = await this.sendCorrelatedSessionRequest({
+      message: {
+        type: "draft.list_artifacts.request",
+        requestId: this.createRequestId(),
+        ...(options?.includeArchived ? { includeArchived: true } : {}),
+      },
+      responseType: "draft.list_artifacts.response",
+    });
+    return artifacts;
+  }
+
+  async getDraftArtifact(artifactId: string): Promise<{
+    artifact: ArtifactRecord | null;
+    dispatches: DispatchRecord[];
+  }> {
+    const { artifact, dispatches } = await this.sendCorrelatedSessionRequest({
+      message: {
+        type: "draft.get_artifact.request",
+        requestId: this.createRequestId(),
+        artifactId,
+      },
+      responseType: "draft.get_artifact.response",
+    });
+    return { artifact, dispatches };
+  }
+
+  /**
+   * Creates when the daemon has never seen the id. `baseVersion: 0` says so.
+   *
+   * A stale `baseVersion` resolves rather than rejects, with `conflict` carrying
+   * the record as it now stands — the caller decides between reloading it and
+   * calling this again with `conflict.version`. There is no force flag.
+   */
+  async upsertDraftArtifact(input: {
+    artifactId: string;
+    baseVersion: number;
+    title?: string | null;
+    body?: string;
+    planned?: PlannedTarget[];
+  }): Promise<{ artifact: ArtifactRecord | null; conflict: ArtifactRecord | null }> {
+    const { artifact, conflict, error } = await this.sendCorrelatedSessionRequest({
+      message: {
+        type: "draft.upsert_artifact.request",
+        requestId: this.createRequestId(),
+        artifactId: input.artifactId,
+        baseVersion: input.baseVersion,
+        ...(input.title !== undefined ? { title: input.title } : {}),
+        ...(input.body !== undefined ? { body: input.body } : {}),
+        ...(input.planned !== undefined ? { planned: input.planned } : {}),
+      },
+      responseType: "draft.upsert_artifact.response",
+    });
+    if (error) throw new Error(error);
+    return { artifact, conflict };
+  }
+
+  async setDraftPlanned(input: {
+    artifactId: string;
+    planned: PlannedTarget[];
+  }): Promise<ArtifactRecord> {
+    const { artifact, error } = await this.sendCorrelatedSessionRequest({
+      message: {
+        type: "draft.set_planned.request",
+        requestId: this.createRequestId(),
+        artifactId: input.artifactId,
+        planned: input.planned,
+      },
+      responseType: "draft.set_planned.response",
+    });
+    if (error || !artifact) throw new Error(error ?? `Draft ${input.artifactId} not found`);
+    return artifact;
+  }
+
+  async setDraftArchived(input: {
+    artifactId: string;
+    archived: boolean;
+  }): Promise<ArtifactRecord> {
+    const { artifact, error } = await this.sendCorrelatedSessionRequest({
+      message: {
+        type: "draft.set_archived.request",
+        requestId: this.createRequestId(),
+        artifactId: input.artifactId,
+        archived: input.archived,
+      },
+      responseType: "draft.set_archived.response",
+    });
+    if (error || !artifact) throw new Error(error ?? `Draft ${input.artifactId} not found`);
+    return artifact;
+  }
+
+  /** Snapshots are immutable, so whatever this returns can be cached forever. */
+  async getDraftSnapshot(input: {
+    artifactId: string;
+    rev: number;
+  }): Promise<SnapshotRecord | null> {
+    const { snapshot } = await this.sendCorrelatedSessionRequest({
+      message: {
+        type: "draft.get_snapshot.request",
+        requestId: this.createRequestId(),
+        artifactId: input.artifactId,
+        rev: input.rev,
+      },
+      responseType: "draft.get_snapshot.response",
+    });
+    return snapshot;
+  }
+
   async getAgentSkillsStatus(): Promise<AgentSkillsStatus> {
     const requestId = this.createRequestId();
     return this.sendCorrelatedSessionRequest({
@@ -6330,6 +6453,13 @@ export class DaemonClient {
         };
       case "project.update":
         return { type: "project.update", payload: msg.payload };
+      case "draft.artifact_update":
+        return {
+          type: "draft.artifact_update",
+          artifactId:
+            msg.payload.kind === "upsert" ? msg.payload.artifact.id : msg.payload.artifactId,
+          payload: msg.payload,
+        };
       case "workspace_setup_progress":
         return {
           type: "workspace_setup_progress",

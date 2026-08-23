@@ -44,6 +44,23 @@ import {
   ScheduleUpdateResponseSchema,
 } from "./schedule/rpc-schemas.js";
 import {
+  DraftListArtifactsRequestSchema,
+  DraftGetArtifactRequestSchema,
+  DraftUpsertArtifactRequestSchema,
+  DraftSetPlannedRequestSchema,
+  DraftSetArchivedRequestSchema,
+  DraftGetSnapshotRequestSchema,
+  DraftSendRevisionRequestSchema,
+  DraftListArtifactsResponseSchema,
+  DraftGetArtifactResponseSchema,
+  DraftUpsertArtifactResponseSchema,
+  DraftSetPlannedResponseSchema,
+  DraftSetArchivedResponseSchema,
+  DraftGetSnapshotResponseSchema,
+  DraftSendRevisionResponseSchema,
+  DraftArtifactUpdateSchema,
+} from "./draft/rpc-schemas.js";
+import {
   LoopRunRequestSchema,
   LoopListRequestSchema,
   LoopInspectRequestSchema,
@@ -3251,6 +3268,13 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ScheduleDeleteRequestSchema,
   ScheduleRunOnceRequestSchema,
   ScheduleUpdateRequestSchema,
+  DraftListArtifactsRequestSchema,
+  DraftGetArtifactRequestSchema,
+  DraftUpsertArtifactRequestSchema,
+  DraftSetPlannedRequestSchema,
+  DraftSetArchivedRequestSchema,
+  DraftGetSnapshotRequestSchema,
+  DraftSendRevisionRequestSchema,
   LoopRunRequestSchema,
   LoopListRequestSchema,
   LoopInspectRequestSchema,
@@ -3483,6 +3507,8 @@ export const ServerInfoStatusPayloadSchema = z
         pluginTimelineItems: z.boolean().optional(),
         // COMPAT(skillManagement): added in v0.4.0, remove gate after 2027-08-16.
         skillManagement: z.boolean().optional(),
+        // COMPAT(drafts): added in v0.5.0, remove gate after 2027-08-24.
+        drafts: z.boolean().optional(),
         // COMPAT(terminalRestoreModes): added in v0.1.81, remove gate after 2026-11-23.
         "terminal-restore-modes": z.boolean().optional(),
         // COMPAT(terminalInputModeReplay): added in v0.2.6, remove gate after 2027-02-02.
@@ -6643,6 +6669,14 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ScheduleDeleteResponseSchema,
   ScheduleRunOnceResponseSchema,
   ScheduleUpdateResponseSchema,
+  DraftListArtifactsResponseSchema,
+  DraftGetArtifactResponseSchema,
+  DraftUpsertArtifactResponseSchema,
+  DraftSetPlannedResponseSchema,
+  DraftSetArchivedResponseSchema,
+  DraftGetSnapshotResponseSchema,
+  DraftSendRevisionResponseSchema,
+  DraftArtifactUpdateSchema,
   LoopRunResponseSchema,
   LoopListResponseSchema,
   LoopInspectResponseSchema,

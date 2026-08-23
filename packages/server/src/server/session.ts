@@ -175,6 +175,8 @@ import {
   createGitMetadataGenerator,
 } from "./session/checkout/git-metadata-generator.js";
 import { ScheduleSession } from "./session/schedule/schedule-session.js";
+import { DraftSession } from "./session/draft/draft-session.js";
+import type { DraftStorage } from "./drafts/draft-storage.js";
 import { ProviderCatalogSession } from "./session/provider/provider-catalog-session.js";
 import { WorkspaceFilesSession } from "./session/files/workspace-files-session.js";
 import { AgentConfigSession } from "./session/agent-config/agent-config-session.js";
@@ -470,6 +472,7 @@ export interface SessionOptions {
   workspaceLabelService?: WorkspaceLabelService;
   filesystem?: SessionFileSystem;
   scheduleService: ScheduleService;
+  draftStorage?: DraftStorage;
   checkoutDiffManager: CheckoutDiffManager;
   github?: ForgeService;
   createAgentMcpTransport?: AgentMcpTransportFactory;
@@ -746,6 +749,7 @@ export class Session {
   private readonly voiceSession: VoiceSession;
   private readonly checkoutSession: CheckoutSession;
   private readonly scheduleSession: ScheduleSession;
+  private readonly draftSession: DraftSession;
   private readonly providerCatalogSession: ProviderCatalogSession;
   private readonly workspaceFilesSession: WorkspaceFilesSession;
   private readonly agentConfigSession: AgentConfigSession;
@@ -922,6 +926,12 @@ export class Session {
       scheduleService,
       logger: this.sessionLogger,
     });
+    this.draftSession = new DraftSession({
+      host: { emit: (msg) => this.emit(msg) },
+      storage: options.draftStorage,
+      logger: this.sessionLogger,
+    });
+    this.draftSession.start();
     this.providerCatalogSession = new ProviderCatalogSession({
       host: {
         emit: (msg) => this.emit(msg),
@@ -2012,7 +2022,7 @@ export class Session {
       this.dispatchPluginMessage(msg) ??
       this.dispatchTerminalMessage(msg) ??
       this.dispatchScheduleMessage(msg) ??
-      this.dispatchMiscMessage(msg);
+      this.dispatchDraftOrMiscMessage(msg);
     if (promise) await promise;
   }
 
@@ -2023,6 +2033,16 @@ export class Session {
       this.dispatchWorkspaceSetupMessage(msg) ??
       this.dispatchWorkspaceAndProjectMessage(msg)
     );
+  }
+
+  /**
+   * Drafts, then upstream's catch-all. These are one call rather than two lines
+   * of the chain above because `dispatchInboundMessage` sits exactly on the
+   * lint complexity ceiling — a twenty-first branch there fails the build, so a
+   * new domain has to arrive without adding one.
+   */
+  private dispatchDraftOrMiscMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    return this.draftSession.dispatch(msg) ?? this.dispatchMiscMessage(msg);
   }
 
   private dispatchOrchestrationSkillsMessage(
@@ -7856,6 +7876,7 @@ export class Session {
       this.unsubscribeTerminalWorkspaceContributionEvents = null;
     }
     this.providerCatalogSession.dispose();
+    this.draftSession.stop();
 
     await this.voiceSession.cleanup();
 

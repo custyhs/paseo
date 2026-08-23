@@ -148,6 +148,7 @@ import {
 } from "./workspace-registry.js";
 import { CheckoutDiffManager } from "./checkout-diff-manager.js";
 import { ScheduleService } from "./schedule/service.js";
+import { DraftStorage } from "./drafts/draft-storage.js";
 import { DaemonConfigStore, type MutableDaemonConfig } from "./daemon-config-store.js";
 import { createOrchestrationSkills } from "./orchestration-skills/index.js";
 import { resolveConfigFromPersisted, type CliConfigOverrides } from "./config.js";
@@ -1340,6 +1341,18 @@ export async function createPaseoDaemon(
     archiveWorkspace: archiveScheduleWorkspaceExternal,
   });
   await scheduleService.start();
+  // Durable prompt drafts. One store for the daemon; each session subscribes to
+  // it for pushes. Failing to open it must not stop the daemon — drafts are a
+  // feature, and `server_info.features.drafts` is how a client is told it is
+  // unavailable rather than broken.
+  const draftStorage = new DraftStorage(path.join(config.paseoHome, "drafts"), logger);
+  const draftStorageOrNull = await draftStorage
+    .initialize()
+    .then(() => draftStorage)
+    .catch((error: unknown) => {
+      logger.error({ err: error }, "Draft storage unavailable; drafts are disabled");
+      return null;
+    });
   agentManager.setAgentArchivedCallback(async (agentId) => {
     try {
       await scheduleService.completeForAgent(agentId);
@@ -1717,6 +1730,7 @@ export async function createPaseoDaemon(
               pluginRuntime,
               orchestrationSkills,
               workspaceLabelService,
+              draftStorageOrNull ?? undefined,
             );
             pluginRuntime.bindPaseoSessionHost(wsServer);
             await pluginRuntime.start();
