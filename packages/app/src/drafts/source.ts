@@ -56,6 +56,8 @@ export interface DraftsSource {
   }): Promise<ArtifactDetail>;
   setPlanned(input: { artifactId: string; planned: PlannedTarget[] }): Promise<ArtifactDetail>;
   setArchived(input: { artifactId: string; archived: boolean }): Promise<ArtifactDetail>;
+  /** Removes a draft outright. Only ever used for one nobody wrote in. */
+  discard(artifactId: string): Promise<void>;
   /** Captures the current revision as an immutable snapshot and dispatches it. */
   send(input: { artifactId: string; target: SendTarget }): Promise<SendResult>;
   subscribe(listener: () => void): () => void;

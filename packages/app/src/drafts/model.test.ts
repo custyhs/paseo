@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   dispatchesInto,
+  isDiscardableDraft,
   isPlannedFor,
   isProjectLevelPlanFor,
   scratchpadBadgeCount,
@@ -175,6 +176,42 @@ describe("scratchpad sections", () => {
       artifact({ id: "b", planned: plannedHere, version: 2, dispatches: [dispatch({ rev: 2 })] }),
     ];
     expect(scratchpadBadgeCount({ artifacts, workspaceId: "ws_main", lookup })).toBe(1);
+  });
+});
+
+describe("discarding a draft nobody wrote in", () => {
+  test("a brand new empty draft is discardable", () => {
+    expect(isDiscardableDraft(artifact({ id: "a" }))).toBe(true);
+  });
+
+  test("anything the user typed keeps it", () => {
+    expect(isDiscardableDraft(artifact({ id: "a", body: "x" }))).toBe(false);
+    expect(isDiscardableDraft(artifact({ id: "b", title: "x" }))).toBe(false);
+    expect(isDiscardableDraft(artifact({ id: "c", body: "   \n  " }))).toBe(true);
+  });
+
+  test("an automatic plan does not save an empty draft", () => {
+    // Creating from the scratchpad always plans this workspace, so treating a
+    // plan as intent would exempt the place blank drafts pile up fastest.
+    expect(isDiscardableDraft(artifact({ id: "a", planned: plannedHere }))).toBe(true);
+  });
+
+  test("having been sent keeps it even if the body was later cleared", () => {
+    const sent = artifact({
+      id: "a",
+      body: "",
+      snapshots: [{ rev: 1, createdAt: "2026-08-01T00:00:00.000Z", body: "was here" }],
+      dispatches: [dispatch({ rev: 1 })],
+    });
+    expect(isDiscardableDraft(sent)).toBe(false);
+  });
+
+  test("the mock really removes it", async () => {
+    const source = new MockDraftsSource();
+    const created = await source.create();
+    await source.discard(created.id);
+    expect(await source.get(created.id)).toBeNull();
+    expect(await source.list()).toHaveLength(0);
   });
 });
 

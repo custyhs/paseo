@@ -143,6 +143,11 @@ export class MockDraftsSource implements DraftsSource {
     return structuredClone(artifact);
   }
 
+  async discard(artifactId: string): Promise<void> {
+    this.artifacts.delete(artifactId);
+    this.emit();
+  }
+
   async send(input: { artifactId: string; target: SendTarget }): Promise<SendResult> {
     const artifact = this.require(input.artifactId);
     const timestamp = this.now();

@@ -6,12 +6,19 @@ import { EditingTextInput } from "@/components/ui/text-input";
 import { useDraftsSource } from "./context";
 import {
   draftDisplayTitle,
+  isDiscardableDraft,
   plannedTargetKey,
   type ArtifactDetail,
   type PlannedTarget,
 } from "./model";
 import { PlanSheet } from "./plan-sheet";
-import { describeWorkspace, useAllWorkspaces } from "./workspaces";
+import {
+  describeWorkspace,
+  useAllWorkspaces,
+  useServerAgents,
+  type DraftAgentOption,
+} from "./workspaces";
+import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { SendSheet } from "./send-sheet";
 import { SnapshotSheet } from "./snapshot-sheet";
 import type { SendTarget } from "./source";
@@ -101,6 +108,59 @@ const LineageRow = memo(function LineageRow({
   );
 });
 
+function sentRowStyle({ pressed: isPressed }: PressableStateCallbackType) {
+  return [styles.sentRow, isPressed && styles.pressed];
+}
+
+/**
+ * Says the send happened and where it went, and gets out of the way. It is the
+ * only feedback that a revision left the editor — the lineage strip lists every
+ * dispatch equally and cannot single out the one that just occurred.
+ */
+const SentConfirmation = memo(function SentConfirmation({
+  target,
+  agents,
+  onOpen,
+  onDismiss,
+}: {
+  target: SendTarget;
+  agents: DraftAgentOption[];
+  onOpen: () => void;
+  onDismiss: () => void;
+}) {
+  const { t } = useTranslation();
+  const agent =
+    target.kind === "existing_agent"
+      ? agents.find((entry) => entry.id === target.agentId)
+      : undefined;
+  const label = agent
+    ? t("drafts.sent.toAgent", { title: agent.title ?? agent.provider })
+    : t("drafts.sent.toNewAgent");
+
+  return (
+    <View style={styles.sentBar}>
+      <Pressable
+        accessibilityRole="button"
+        testID="draft-sent-confirmation"
+        onPress={onOpen}
+        disabled={!agent}
+        style={sentRowStyle}
+      >
+        <Text style={styles.sentLabel}>{label}</Text>
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t("drafts.sent.dismiss")}
+        testID="draft-sent-dismiss"
+        onPress={onDismiss}
+        style={pressed}
+      >
+        <Text style={styles.sentDismiss}>×</Text>
+      </Pressable>
+    </View>
+  );
+});
+
 /**
  * The editor both surfaces share. A and C are two views of one store, so they
  * have to be one component — otherwise the two would drift and "same draft,
@@ -116,10 +176,12 @@ export function DraftEditor({
   const { t } = useTranslation();
   const source = useDraftsSource();
   const plannedLabel = usePlannedLabel();
+  const agents = useServerAgents(serverId);
   const [isSaving, setIsSaving] = useState(false);
   const [isSendOpen, setIsSendOpen] = useState(false);
   const [isPlanOpen, setIsPlanOpen] = useState(false);
   const [openRev, setOpenRev] = useState<number | null>(null);
+  const [justSent, setJustSent] = useState<SendTarget | null>(null);
 
   const versionRef = useRef(artifact.version);
   const latestTextRef = useRef<string | null>(null);
@@ -167,13 +229,23 @@ export function DraftEditor({
     [flush],
   );
 
-  // A pending edit must not die with the component; flush it on the way out.
+  // A pending edit must not die with the component; flush it on the way out. A
+  // draft nobody wrote in is discarded on the same path, so opening the editor
+  // and changing your mind leaves nothing behind.
+  const artifactRef = useRef(artifact);
+  artifactRef.current = artifact;
   useEffect(
     () => () => {
       if (timerRef.current !== null) clearTimeout(timerRef.current);
-      if (latestTextRef.current !== null) void flush();
+      if (latestTextRef.current !== null) {
+        void flush();
+        return;
+      }
+      if (isDiscardableDraft(artifactRef.current)) {
+        void source.discard(artifactRef.current.id);
+      }
     },
-    [flush],
+    [flush, source],
   );
 
   const onRemovePlan = useCallback(
@@ -198,17 +270,28 @@ export function DraftEditor({
     [artifact.id, artifact.planned, source],
   );
 
+  // Sending does not navigate: the draft stays open so the next revision can be
+  // written, or sent somewhere else. A confirmation row carries the only thing
+  // the lineage strip cannot say on its own — that this just happened, and where
+  // it went — and it is the way through to that session for anyone who wants it.
   const onSend = useCallback(
     (target: SendTarget) => {
       setIsSendOpen(false);
       const send = async () => {
         const result = await source.send({ artifactId: artifact.id, target });
         versionRef.current = result.artifact.version;
+        setJustSent(target);
       };
       void send();
     },
     [artifact.id, source],
   );
+
+  const dismissSent = useCallback(() => setJustSent(null), []);
+  const openSentAgent = useCallback(() => {
+    if (justSent?.kind !== "existing_agent") return;
+    navigateToAgent({ serverId, agentId: justSent.agentId });
+  }, [justSent, serverId]);
 
   const openSend = useCallback(() => setIsSendOpen(true), []);
   const closeSend = useCallback(() => setIsSendOpen(false), []);
@@ -270,6 +353,15 @@ export function DraftEditor({
         placeholder={t("drafts.editor.bodyPlaceholder")}
         style={styles.input}
       />
+
+      {justSent ? (
+        <SentConfirmation
+          target={justSent}
+          agents={agents}
+          onOpen={openSentAgent}
+          onDismiss={dismissSent}
+        />
+      ) : null}
 
       {lineage.length > 0 ? (
         <View style={styles.lineage}>
@@ -358,6 +450,23 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.sm,
     color: theme.colors.accentBright,
     marginRight: theme.spacing[3],
+  },
+  sentBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+    paddingHorizontal: theme.spacing[3],
+    paddingVertical: theme.spacing[1.5],
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+    backgroundColor: theme.colors.surface1,
+  },
+  sentRow: { flex: 1 },
+  sentLabel: { fontSize: theme.fontSize.sm, color: theme.colors.accentBright },
+  sentDismiss: {
+    fontSize: theme.fontSize.base,
+    color: theme.colors.foregroundMuted,
+    paddingHorizontal: theme.spacing[1],
   },
   foot: {
     flexDirection: "row",

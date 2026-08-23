@@ -62,6 +62,11 @@ const en = {
     projectSubtitle: "Any workspace in this project",
     noTargets: "No projects on this host yet.",
   },
+  sent: {
+    toAgent: "Sent to {{title}} — open it",
+    toNewAgent: "Sent. A new session is starting.",
+    dismiss: "Dismiss",
+  },
   snapshot: {
     title: "Sent revision — rev {{rev}}",
     subtitle: "clientMessageId {{clientMessageId}}",
@@ -134,6 +139,11 @@ const zhCN: typeof en = {
     subtitle: "可以选多个。目标 workspace 还不存在时,就选到项目级。",
     projectSubtitle: "这个项目里的任意 workspace",
     noTargets: "这个 host 上还没有项目。",
+  },
+  sent: {
+    toAgent: "已发送给 {{title}} —— 点击打开",
+    toNewAgent: "已发送。新会话正在启动。",
+    dismiss: "关闭",
   },
   snapshot: {
     title: "已发送的修订版 —— rev {{rev}}",

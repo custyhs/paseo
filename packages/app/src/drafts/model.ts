@@ -186,6 +186,25 @@ export function scratchpadBadgeCount(input: {
   return selectWorkspaceDraftSections(input).planned.length;
 }
 
+/**
+ * A draft nobody ever wrote in. Leaving the editor discards these rather than
+ * letting the list accumulate blank rows the user has to archive by hand —
+ * "start writing before organizing" only holds if not-writing costs nothing.
+ *
+ * A plan does not save it. Creating from the scratchpad plans this workspace
+ * automatically, so treating that as intent would exempt the very place blank
+ * drafts pile up fastest. Typing is the evidence of intent; a title or a send
+ * counts too, since both take a deliberate act.
+ */
+export function isDiscardableDraft(artifact: ArtifactDetail): boolean {
+  return (
+    artifact.body.trim().length === 0 &&
+    (artifact.title?.trim().length ?? 0) === 0 &&
+    artifact.snapshots.length === 0 &&
+    artifact.dispatches.length === 0
+  );
+}
+
 export function draftDisplayTitle(artifact: ArtifactSummary): string | null {
   const trimmed = artifact.title?.trim();
   if (trimmed) return trimmed;
