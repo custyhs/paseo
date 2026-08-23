@@ -1,4 +1,5 @@
 import { en, type TranslationResources } from "./en";
+import { drafts } from "./drafts";
 import { pluginSettings } from "./plugin-settings";
 
 export const zhCN: TranslationResources = {
@@ -2627,4 +2628,5 @@ export const zhCN: TranslationResources = {
       },
     },
   },
+  drafts: drafts["zh-CN"],
 };

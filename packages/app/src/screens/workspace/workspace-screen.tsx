@@ -361,6 +361,7 @@ function getFallbackTabOptionDescription(
     changes: string;
     files: string;
     pullRequest: string;
+    scratchpad: string;
   },
 ): string {
   if (tab.target.kind === "new_tab") {
@@ -398,6 +399,9 @@ function getFallbackTabOptionDescription(
   }
   if (tab.target.kind === "plugin") {
     return tab.target.panelId;
+  }
+  if (tab.target.kind === "scratchpad") {
+    return labels.scratchpad;
   }
   return tab.target.path;
 }
@@ -597,6 +601,7 @@ function MobileWorkspaceTabOption({
       agent: t("workspace.tabs.fallback.agent"),
       changes: t("panels.diff.changesLabel"),
       files: t("panels.files.label"),
+      scratchpad: t("drafts.panel.label"),
       pullRequest: t("panels.pullRequest.label"),
     }),
     [t],
@@ -2346,6 +2351,7 @@ function WorkspaceScreenContent({
       agent: t("workspace.tabs.fallback.agent"),
       changes: t("panels.diff.changesLabel"),
       files: t("panels.files.label"),
+      scratchpad: t("drafts.panel.label"),
       pullRequest: t("panels.pullRequest.label"),
     }),
     [t],

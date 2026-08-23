@@ -1,4 +1,5 @@
 import { en, type TranslationResources } from "./en";
+import { drafts } from "./drafts";
 import { pluginSettings } from "./plugin-settings";
 
 export const fr: TranslationResources = {
@@ -2726,4 +2727,5 @@ export const fr: TranslationResources = {
       },
     },
   },
+  drafts: drafts.fr,
 };

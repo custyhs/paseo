@@ -1,4 +1,5 @@
 import { en, type TranslationResources } from "./en";
+import { drafts } from "./drafts";
 import { pluginSettings } from "./plugin-settings";
 
 export const ptBR: TranslationResources = {
@@ -2701,4 +2702,5 @@ export const ptBR: TranslationResources = {
       },
     },
   },
+  drafts: drafts["pt-BR"],
 };

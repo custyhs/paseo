@@ -1,3 +1,4 @@
+import { drafts } from "./drafts";
 import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
@@ -2710,4 +2711,5 @@ export const ru: TranslationResources = {
       },
     },
   },
+  drafts: drafts.ru,
 };

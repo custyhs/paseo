@@ -1,3 +1,4 @@
+import { drafts } from "./drafts";
 export const en = {
   common: {
     back: "Back",
@@ -2769,6 +2770,7 @@ export const en = {
       },
     },
   },
+  drafts: drafts.en,
 } as const;
 
 type WidenStringLeaves<T> = {

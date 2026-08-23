@@ -58,6 +58,11 @@ const manifests = {
     supportedHosts: ["main", "explorer"],
     resourceKey: () => "pull_request",
   },
+  scratchpad: {
+    kind: "scratchpad",
+    supportedHosts: ["main", "explorer"],
+    resourceKey: () => "scratchpad",
+  },
   file: {
     kind: "file",
     supportedHosts: ["main", "explorer"],
