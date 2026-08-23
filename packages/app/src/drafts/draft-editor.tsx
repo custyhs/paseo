@@ -22,13 +22,28 @@ import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { SendSheet } from "./send-sheet";
 import { SnapshotSheet } from "./snapshot-sheet";
 import type { SendTarget } from "./source";
+import { DraftCheckpointStore } from "./checkpoint";
+import { draftCheckpointStorage } from "./checkpoint-storage";
+import { createDraftSaveLoop, type DraftSaveState } from "./save-loop";
 
-/** Matches `DRAFT_PERSIST_INTERVAL_MS`, the composer's own checkpoint cadence. */
-const DRAFT_WRITE_DEBOUNCE_MS = 200;
+/**
+ * One store for the whole app. The checkpoints live under a single storage key
+ * and a second store over the same key would clobber the first's writes.
+ */
+const checkpoints = new DraftCheckpointStore(draftCheckpointStorage);
 
 const ThemedTextInput = withUnistyles(EditingTextInput, (theme) => ({
   placeholderTextColor: theme.colors.foregroundMuted,
 }));
+
+/** Every state says something different. `saved` is never shown for text the
+ * daemon does not have — that was the bug this whole seam exists to close. */
+const SAVE_CHIP_KEY: Record<DraftSaveState["status"], string> = {
+  saved: "drafts.editor.saved",
+  saving: "drafts.editor.saving",
+  unsaved: "drafts.editor.unsaved",
+  conflict: "drafts.editor.conflict",
+};
 
 function pressed({ pressed: isPressed }: PressableStateCallbackType) {
   return isPressed ? styles.pressed : null;
@@ -177,76 +192,63 @@ export function DraftEditor({
   const source = useDraftsSource();
   const plannedLabel = usePlannedLabel();
   const agents = useServerAgents(serverId);
-  const [isSaving, setIsSaving] = useState(false);
+  const [saveState, setSaveState] = useState<DraftSaveState>({ status: "saved" });
   const [isSendOpen, setIsSendOpen] = useState(false);
   const [isPlanOpen, setIsPlanOpen] = useState(false);
   const [openRev, setOpenRev] = useState<number | null>(null);
   const [justSent, setJustSent] = useState<SendTarget | null>(null);
 
-  const versionRef = useRef(artifact.version);
-  const latestTextRef = useRef<string | null>(null);
-  const inFlightRef = useRef(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Writes coalesce behind one in-flight save. One request per keystroke races
-  // the optimistic-concurrency check and every write after the first carries a
-  // stale base version, so characters would be dropped rather than saved.
-  const flush = useCallback(async () => {
-    if (inFlightRef.current) return;
-    inFlightRef.current = true;
-    setIsSaving(true);
-    try {
-      while (latestTextRef.current !== null) {
-        const body = latestTextRef.current;
-        latestTextRef.current = null;
-        const saved = await source.update({
-          artifactId: artifact.id,
-          baseVersion: versionRef.current,
-          body,
-        });
-        versionRef.current = saved.version;
-      }
-    } finally {
-      inFlightRef.current = false;
-      setIsSaving(false);
-    }
-  }, [artifact.id, source]);
-
-  // A pause, not a keystroke, is what earns a write. `version` is the
-  // optimistic-concurrency token, so one write per character makes it climb by
-  // hundreds while typing a paragraph — noise that also buries the numbers that
-  // do mean something, the revisions that were actually sent. The interval
-  // matches the composer's own checkpoint cadence.
-  const onChangeText = useCallback(
-    (next: string) => {
-      latestTextRef.current = next;
-      if (timerRef.current !== null) clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(() => {
-        timerRef.current = null;
-        void flush();
-      }, DRAFT_WRITE_DEBOUNCE_MS);
-    },
-    [flush],
+  // The loop owns everything about writing: the debounce, the coalescing, the
+  // local checkpoint and what each failure means. It is a plain object so the
+  // rules can be tested without a renderer — see `offline.test.ts`.
+  const loop = useMemo(
+    () =>
+      createDraftSaveLoop({
+        source,
+        checkpoints,
+        serverId,
+        artifactId: artifact.id,
+        version: artifact.version,
+        onState: setSaveState,
+      }),
+    // Deliberately not `artifact.version`: the loop tracks the version itself
+    // from here on, and rebuilding it mid-edit would drop queued text.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [source, serverId, artifact.id],
   );
 
-  // A pending edit must not die with the component; flush it on the way out. A
+  useEffect(() => {
+    void checkpoints.load();
+  }, []);
+
+  // A pending edit must not die with the component; write it on the way out. A
   // draft nobody wrote in is discarded on the same path, so opening the editor
   // and changing your mind leaves nothing behind.
   const artifactRef = useRef(artifact);
   artifactRef.current = artifact;
   useEffect(
     () => () => {
-      if (timerRef.current !== null) clearTimeout(timerRef.current);
-      if (latestTextRef.current !== null) {
-        void flush();
-        return;
-      }
-      if (isDiscardableDraft(artifactRef.current)) {
+      if (loop.hasPendingText()) {
+        void loop.flush();
+      } else if (isDiscardableDraft(artifactRef.current)) {
         void source.discard(artifactRef.current.id);
       }
+      loop.dispose();
     },
-    [flush, source],
+    [loop, source],
   );
+
+  const onChangeText = loop.onChangeText;
+
+  const onReloadRemote = useCallback(() => {
+    if (saveState.status !== "conflict") return;
+    void loop.reload(saveState.remote);
+  }, [loop, saveState]);
+
+  const onOverwriteRemote = useCallback(() => {
+    if (saveState.status !== "conflict") return;
+    void loop.overwrite(saveState.remote);
+  }, [loop, saveState]);
 
   const onRemovePlan = useCallback(
     (target: PlannedTarget) => {
@@ -279,12 +281,12 @@ export function DraftEditor({
       setIsSendOpen(false);
       const send = async () => {
         const result = await source.send({ artifactId: artifact.id, target });
-        versionRef.current = result.artifact.version;
+        loop.noteVersion(result.artifact.version);
         setJustSent(target);
       };
       void send();
     },
-    [artifact.id, source],
+    [artifact.id, loop, source],
   );
 
   const dismissSent = useCallback(() => setJustSent(null), []);
@@ -317,10 +319,32 @@ export function DraftEditor({
         <Text numberOfLines={1} style={styles.title}>
           {draftDisplayTitle(artifact) ?? t("drafts.labels.untitled")}
         </Text>
-        <Text style={styles.saveChip}>
-          {isSaving ? t("drafts.editor.saving") : t("drafts.editor.saved")}
+        <Text style={saveState.status === "saved" ? styles.saveChip : styles.saveChipPending}>
+          {t(SAVE_CHIP_KEY[saveState.status])}
         </Text>
       </View>
+
+      {saveState.status === "conflict" ? (
+        <View testID="draft-conflict" style={styles.conflictBar}>
+          <Text style={styles.conflictText}>{t("drafts.conflict.message")}</Text>
+          <Pressable
+            accessibilityRole="button"
+            testID="draft-conflict-reload"
+            onPress={onReloadRemote}
+            style={chipStyle}
+          >
+            <Text style={styles.chipLabel}>{t("drafts.conflict.reload")}</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            testID="draft-conflict-overwrite"
+            onPress={onOverwriteRemote}
+            style={chipStyle}
+          >
+            <Text style={styles.chipLabel}>{t("drafts.conflict.overwrite")}</Text>
+          </Pressable>
+        </View>
+      ) : null}
 
       <View style={styles.planRow}>
         <Text style={styles.planLabel}>{t("drafts.labels.plannedIn")}</Text>
@@ -410,6 +434,19 @@ const styles = StyleSheet.create((theme) => ({
   },
   title: { flex: 1, fontSize: theme.fontSize.base, color: theme.colors.foreground },
   saveChip: { fontSize: theme.fontSize.sm, color: theme.colors.foregroundMuted },
+  saveChipPending: { fontSize: theme.fontSize.sm, color: theme.colors.statusWarning },
+  conflictBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: theme.spacing[2],
+    paddingHorizontal: theme.spacing[3],
+    paddingVertical: theme.spacing[1.5],
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+    backgroundColor: theme.colors.surface1,
+  },
+  conflictText: { flex: 1, fontSize: theme.fontSize.sm, color: theme.colors.foreground },
   planRow: {
     flexDirection: "row",
     alignItems: "center",

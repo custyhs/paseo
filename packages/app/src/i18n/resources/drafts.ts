@@ -45,7 +45,13 @@ const en = {
     bodyPlaceholder: "Write the next instruction. It is saved from the first keystroke.",
     saving: "Saving…",
     saved: "Saved",
-    conflict: "This draft changed elsewhere. Reload to see the newer version.",
+    unsaved: "Not saved",
+    conflict: "Changed elsewhere",
+  },
+  conflict: {
+    message: "This draft was changed elsewhere. Choose which version to keep.",
+    reload: "Reload",
+    overwrite: "Overwrite",
   },
   send: {
     title: "Send this revision",
@@ -123,7 +129,13 @@ const zhCN: typeof en = {
     bodyPlaceholder: "写下一阶段的指令。第一个字符起就已经保存。",
     saving: "保存中…",
     saved: "已保存",
-    conflict: "这份草稿在别处被改过。重新载入以查看较新的版本。",
+    unsaved: "未保存",
+    conflict: "在别处被改过",
+  },
+  conflict: {
+    message: "这份草稿在别处被改过。选择保留哪个版本。",
+    reload: "重新载入",
+    overwrite: "覆盖",
   },
   send: {
     title: "发送这个修订版",
