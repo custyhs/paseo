@@ -1,13 +1,13 @@
-import { memo, useCallback, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View, type PressableStateCallbackType } from "react-native";
 import { NotebookPen } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import invariant from "tiny-invariant";
-import { EditingTextInput } from "@/components/ui/text-input";
 import { usePaneContext } from "@/panels/pane-context";
 import type { PanelRegistration } from "@/panels/panel-registry";
 import { useAllDrafts, useDraftsSource } from "@/drafts/context";
+import { DraftEditor } from "@/drafts/draft-editor";
 import {
   dispatchesInto,
   draftDisplayTitle,
@@ -19,9 +19,6 @@ import {
 import { useSessionStore } from "@/stores/session-store";
 
 const ThemedNotebookPen = withUnistyles(NotebookPen);
-const ThemedTextInput = withUnistyles(EditingTextInput, (theme) => ({
-  placeholderTextColor: theme.colors.foregroundMuted,
-}));
 
 function useScratchpadDescriptor() {
   const { t } = useTranslation();
@@ -143,75 +140,6 @@ function newButtonStyle({ pressed }: PressableStateCallbackType) {
   return [styles.newButton, pressed && styles.pressed];
 }
 
-/**
- * The input is uncontrolled by design: `EditingTextInput` owns its own text so a
- * re-render cannot interrupt IME composition. Feeding `value` back would break
- * exactly the case this surface exists for — writing a long instruction, often
- * in a language that composes.
- *
- * Writes are serialized behind a single in-flight save. Firing one per keystroke
- * would race the optimistic-concurrency check and quietly drop characters, since
- * every write after the first would carry a stale base version.
- */
-function DraftEditor({ artifact }: { artifact: ArtifactDetail }) {
-  const { t } = useTranslation();
-  const { workspaceId } = usePaneContext();
-  const source = useDraftsSource(workspaceId);
-  const [isSaving, setIsSaving] = useState(false);
-  const versionRef = useRef(artifact.version);
-  const latestTextRef = useRef<string | null>(null);
-  const inFlightRef = useRef(false);
-
-  const flush = useCallback(async () => {
-    if (inFlightRef.current) return;
-    inFlightRef.current = true;
-    setIsSaving(true);
-    try {
-      while (latestTextRef.current !== null) {
-        const body = latestTextRef.current;
-        latestTextRef.current = null;
-        const saved = await source.update({
-          artifactId: artifact.id,
-          baseVersion: versionRef.current,
-          body,
-        });
-        versionRef.current = saved.version;
-      }
-    } finally {
-      inFlightRef.current = false;
-      setIsSaving(false);
-    }
-  }, [artifact.id, source]);
-
-  const onChangeText = useCallback(
-    (next: string) => {
-      latestTextRef.current = next;
-      void flush();
-    },
-    [flush],
-  );
-
-  return (
-    <View style={styles.editor}>
-      <View style={styles.editorHead}>
-        <Text numberOfLines={1} style={styles.editorTitle}>
-          {draftDisplayTitle(artifact) ?? t("drafts.labels.untitled")}
-        </Text>
-        <Text style={styles.saveChip}>
-          {isSaving ? t("drafts.editor.saving") : t("drafts.editor.saved")}
-        </Text>
-      </View>
-      <ThemedTextInput
-        multiline
-        initialValue={artifact.body}
-        onChangeText={onChangeText}
-        placeholder={t("drafts.editor.bodyPlaceholder")}
-        style={styles.editorInput}
-      />
-    </View>
-  );
-}
-
 function ScratchpadPanel() {
   const { t } = useTranslation();
   const { serverId, workspaceId, target } = usePaneContext();
@@ -298,7 +226,7 @@ function ScratchpadPanel() {
 
       <View style={styles.editorPane}>
         {selected ? (
-          <DraftEditor key={selected.id} artifact={selected} />
+          <DraftEditor key={selected.id} artifact={selected} serverId={serverId} />
         ) : (
           <View style={styles.emptyState}>
             <Text style={styles.emptyHint}>{t("drafts.empty.pickDraft")}</Text>

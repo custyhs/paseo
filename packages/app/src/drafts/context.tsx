@@ -102,8 +102,13 @@ let sharedMock: MockDraftsSource | null = null;
  * created in the scratchpad has to show up in the Drafts destination, which is
  * the whole claim of "two views, one store".
  */
-export function getSharedMockDraftsSource(workspaceId: string): DraftsSource {
-  sharedMock ??= new MockDraftsSource({ seed: bindSeedsToWorkspace(workspaceId) });
+export function getSharedMockDraftsSource(workspaceId?: string): DraftsSource {
+  // Seeds only bind when a workspace asks first. Reaching the mock from the
+  // global destination has no workspace to bind to, and inventing one would put
+  // drafts in a scratchpad the user never opened.
+  sharedMock ??= new MockDraftsSource({
+    seed: workspaceId === undefined ? [] : bindSeedsToWorkspace(workspaceId),
+  });
   return sharedMock;
 }
 
@@ -117,11 +122,16 @@ export function DraftsSourceProvider({
   return <DraftsSourceContext.Provider value={source}>{children}</DraftsSourceContext.Provider>;
 }
 
-export function useDraftsSource(fallbackWorkspaceId: string): DraftsSource {
+/**
+ * `seedWorkspaceId` only matters for the mock: it decides which workspace the
+ * demo drafts are planned for. Surfaces that are not standing in a workspace
+ * omit it.
+ */
+export function useDraftsSource(seedWorkspaceId?: string): DraftsSource {
   const injected = useContext(DraftsSourceContext);
   return useMemo(
-    () => injected ?? getSharedMockDraftsSource(fallbackWorkspaceId),
-    [injected, fallbackWorkspaceId],
+    () => injected ?? getSharedMockDraftsSource(seedWorkspaceId),
+    [injected, seedWorkspaceId],
   );
 }
 

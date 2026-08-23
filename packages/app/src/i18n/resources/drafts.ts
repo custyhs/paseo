@@ -17,6 +17,7 @@ const en = {
   sections: {
     planned: "Planned here",
     ranHere: "Ran here",
+    lineage: "Lineage",
   },
   actions: {
     newDraft: "New draft",
@@ -35,6 +36,8 @@ const en = {
     sentToNewAgent: "New session",
     plannedIn: "Planned in",
     noPlan: "Not planned anywhere — that is fine",
+    unplanned: "Unplanned",
+    sentCount: "Sent ×{{count}}",
     version: "v{{version}}",
   },
   editor: {
@@ -43,6 +46,33 @@ const en = {
     saving: "Saving…",
     saved: "Saved",
     conflict: "This draft changed elsewhere. Reload to see the newer version.",
+  },
+  send: {
+    title: "Send this revision",
+    subtitle: "A byte-exact snapshot is captured now. The draft stays editable.",
+    plannedTag: "Planned",
+    newAgentIn: "New agent in {{where}}",
+    newAgentSubtitle: "Starts a fresh session with this revision",
+    existingAgent: "Send to {{title}}",
+    noTargets: "No workspaces on this host yet.",
+  },
+  plan: {
+    title: "Plan this draft for",
+    subtitle: "Several places are fine. Project level works when the worktree does not exist yet.",
+    projectSubtitle: "Any workspace in this project",
+    noTargets: "No projects on this host yet.",
+  },
+  snapshot: {
+    title: "Sent revision — rev {{rev}}",
+    subtitle: "clientMessageId {{clientMessageId}}",
+    immutable: "Immutable. This is exactly what the agent received.",
+  },
+  list: {
+    title: "Drafts",
+    searchPlaceholder: "Search all drafts…",
+    clearSearch: "Clear search",
+    empty: "No drafts yet.",
+    noMatches: "No drafts match that search.",
   },
   empty: {
     plannedTitle: "Nothing planned here yet",
@@ -60,6 +90,7 @@ const zhCN: typeof en = {
   sections: {
     planned: "计划在这里执行",
     ranHere: "曾在这里执行过",
+    lineage: "谱系",
   },
   actions: {
     newDraft: "新建草稿",
@@ -78,6 +109,8 @@ const zhCN: typeof en = {
     sentToNewAgent: "新会话",
     plannedIn: "预定执行位置",
     noPlan: "未预定 —— 不预定也完全可以",
+    unplanned: "未预定",
+    sentCount: "已发送 ×{{count}}",
     version: "v{{version}}",
   },
   editor: {
@@ -86,6 +119,33 @@ const zhCN: typeof en = {
     saving: "保存中…",
     saved: "已保存",
     conflict: "这份草稿在别处被改过。重新载入以查看较新的版本。",
+  },
+  send: {
+    title: "发送这个修订版",
+    subtitle: "现在捕获一份逐字节精确的快照。草稿之后仍可编辑。",
+    plannedTag: "已预定",
+    newAgentIn: "在 {{where}} 起新 agent",
+    newAgentSubtitle: "用这个修订版开一个新会话",
+    existingAgent: "发给 {{title}}",
+    noTargets: "这个 host 上还没有 workspace。",
+  },
+  plan: {
+    title: "把这份草稿预定到",
+    subtitle: "可以选多个。目标 workspace 还不存在时,就选到项目级。",
+    projectSubtitle: "这个项目里的任意 workspace",
+    noTargets: "这个 host 上还没有项目。",
+  },
+  snapshot: {
+    title: "已发送的修订版 —— rev {{rev}}",
+    subtitle: "clientMessageId {{clientMessageId}}",
+    immutable: "不可变。这就是 agent 当时收到的确切内容。",
+  },
+  list: {
+    title: "草稿",
+    searchPlaceholder: "搜索全部草稿…",
+    clearSearch: "清除搜索",
+    empty: "还没有草稿。",
+    noMatches: "没有匹配的草稿。",
   },
   empty: {
     plannedTitle: "这里还没有计划中的草稿",
