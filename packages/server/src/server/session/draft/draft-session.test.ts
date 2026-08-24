@@ -225,6 +225,162 @@ describe("draft rpcs", () => {
   });
 });
 
+/**
+ * Sending is two RPCs with the client's own `createAgent` between them. What the
+ * daemon owns is the evidence: a frozen snapshot and an append-only record of
+ * what was attempted.
+ */
+describe("capturing and settling a send", () => {
+  async function capture(target = { kind: "new_agent" as const, workspaceId: "ws-1" }) {
+    await send({
+      type: "draft.capture_revision.request",
+      requestId: "capture",
+      artifactId: ID,
+      target,
+    });
+    return lastOfType("draft.capture_revision.response").payload;
+  }
+
+  test("freezes the body and hands back the bridge id", async () => {
+    await createDraft("send exactly this");
+    const payload = await capture();
+
+    expect(payload.snapshot?.body).toBe("send exactly this");
+    expect(payload.dispatch?.status).toBe("pending");
+    // The id the client passes to createAgent as `clientMessageId`, which is
+    // what later ties the draft to a message in the agent's timeline.
+    expect(payload.dispatch?.clientMessageId).toBeTruthy();
+    expect(payload.error).toBeNull();
+  });
+
+  test("the snapshot keeps the sent text even after the draft moves on", async () => {
+    await createDraft("send exactly this");
+    const captured = await capture();
+
+    await send({
+      type: "draft.upsert_artifact.request",
+      requestId: "later",
+      artifactId: ID,
+      baseVersion: 1,
+      body: "rewritten afterwards",
+    });
+
+    // INV-A. What was sent is not what the draft says now, and the lineage has
+    // to show the former.
+    await send({
+      type: "draft.get_snapshot.request",
+      requestId: "snap",
+      artifactId: ID,
+      rev: captured.snapshot?.rev ?? 0,
+    });
+    expect(lastOfType("draft.get_snapshot.response").payload.snapshot?.body).toBe(
+      "send exactly this",
+    );
+  });
+
+  test("capturing the same revision twice returns the same snapshot", async () => {
+    await createDraft("send exactly this");
+    const first = await capture();
+    const second = await capture();
+
+    expect(second.snapshot).toEqual(first.snapshot);
+    // Two dispatches, one snapshot: sending the same thought to two places is
+    // two sends of one revision, not two revisions.
+    expect(second.dispatch?.id).not.toBe(first.dispatch?.id);
+    expect((await storage.get(ID))?.snapshots).toHaveLength(1);
+  });
+
+  test("settling records the agent it reached", async () => {
+    await createDraft();
+    const captured = await capture();
+
+    await send({
+      type: "draft.settle_dispatch.request",
+      requestId: "settle",
+      artifactId: ID,
+      dispatchId: captured.dispatch?.id ?? "",
+      status: "sent",
+      agentId: "agent-1",
+    });
+
+    const settled = lastOfType("draft.settle_dispatch.response").payload.dispatch;
+    expect(settled?.status).toBe("sent");
+    expect(settled?.agentId).toBe("agent-1");
+    // Append-only: the pending line is still there, and the reader folds by id.
+    expect((await storage.get(ID))?.dispatches.at(-1)?.status).toBe("sent");
+  });
+
+  test("a failed send keeps its snapshot and says it failed", async () => {
+    await createDraft("send exactly this");
+    const captured = await capture();
+
+    await send({
+      type: "draft.settle_dispatch.request",
+      requestId: "settle",
+      artifactId: ID,
+      dispatchId: captured.dispatch?.id ?? "",
+      status: "failed",
+      error: "provider refused",
+    });
+
+    const detail = await storage.get(ID);
+    // INV-B: the snapshot is what the user meant to send, and that is worth
+    // more when it did not arrive, not less.
+    expect(detail?.snapshots).toHaveLength(1);
+    expect(detail?.dispatches.at(-1)).toMatchObject({
+      status: "failed",
+      error: "provider refused",
+    });
+  });
+
+  test("a client that never settles leaves a pending record, not a lie", async () => {
+    await createDraft();
+    await capture();
+
+    // The app could die here. What is on disk then is exactly what is known:
+    // the send left, and its result is not.
+    expect((await storage.get(ID))?.dispatches.at(-1)?.status).toBe("pending");
+  });
+
+  test("sending to an existing agent records that agent from the start", async () => {
+    await createDraft();
+    const payload = await capture({
+      kind: "existing_agent",
+      agentId: "agent-9",
+      workspaceId: "ws-1",
+    });
+    expect(payload.dispatch?.agentId).toBe("agent-9");
+  });
+
+  test("capturing a draft that is not there answers, rather than erroring out", async () => {
+    await send({
+      type: "draft.capture_revision.request",
+      requestId: "capture",
+      artifactId: "drf_nope",
+      target: { kind: "new_agent", workspaceId: "ws-1" },
+    });
+    const payload = lastOfType("draft.capture_revision.response").payload;
+    expect(payload.snapshot).toBeNull();
+    expect(payload.error).not.toBeNull();
+    expect(emitted.some((msg) => msg.type === "rpc_error")).toBe(false);
+  });
+
+  test("settling a dispatch that is not there answers, rather than erroring out", async () => {
+    await createDraft();
+    await send({
+      type: "draft.settle_dispatch.request",
+      requestId: "settle",
+      artifactId: ID,
+      dispatchId: "nope",
+      status: "sent",
+      agentId: "agent-1",
+    });
+    const payload = lastOfType("draft.settle_dispatch.response").payload;
+    expect(payload.dispatch).toBeNull();
+    expect(payload.error).not.toBeNull();
+  });
+});
+
 describe("pushes", () => {
   test("a write by anyone reaches this client", async () => {
     session.start();

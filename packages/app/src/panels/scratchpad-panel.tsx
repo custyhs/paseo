@@ -6,7 +6,8 @@ import { useTranslation } from "react-i18next";
 import invariant from "tiny-invariant";
 import { usePaneContext } from "@/panels/pane-context";
 import type { PanelRegistration } from "@/panels/panel-registry";
-import { useAllDrafts, useDraftsSource } from "@/drafts/context";
+import { DraftsSourceProvider, useAllDrafts } from "@/drafts/context";
+import { useHostDraftsSource } from "@/drafts/use-host-source";
 import { useWorkspaceProjectLookup } from "@/drafts/workspaces";
 import { DraftEditor } from "@/drafts/draft-editor";
 import {
@@ -124,7 +125,7 @@ function ScratchpadPanel() {
   const { serverId, workspaceId, target } = usePaneContext();
   invariant(target.kind === "scratchpad", "ScratchpadPanel requires a scratchpad target");
 
-  const source = useDraftsSource(workspaceId);
+  const source = useHostDraftsSource(serverId);
   const { artifacts } = useAllDrafts(source);
   const lookup = useWorkspaceProjectLookup();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -153,71 +154,77 @@ function ScratchpadPanel() {
   const onToggleHistory = useCallback(() => setIsHistoryOpen((open) => !open), []);
 
   return (
-    <View testID="scratchpad-panel" style={styles.container}>
-      <View style={styles.listPane}>
-        <View style={styles.sectionHead}>
-          <Text style={styles.sectionTitle}>{t("drafts.sections.planned")}</Text>
-          <View style={styles.spacer} />
-          <Pressable
-            accessibilityRole="button"
-            testID="scratchpad-new-draft"
-            onPress={onCreate}
-            style={newButtonStyle}
-          >
-            <Text style={styles.newButtonLabel}>{t("drafts.actions.newDraft")}</Text>
-          </Pressable>
-        </View>
-
-        <ScrollView>
-          {sections.planned.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyTitle}>{t("drafts.empty.plannedTitle")}</Text>
-              <Text style={styles.emptyHint}>{t("drafts.empty.plannedHint")}</Text>
-            </View>
-          ) : (
-            sections.planned.map((artifact) => (
-              <DraftRow
-                key={artifact.id}
-                artifact={artifact}
-                isSelected={artifact.id === selectedId}
-                isSecondary={isProjectLevelPlanFor(artifact, workspaceId, lookup)}
-                onSelect={setSelectedId}
-              />
-            ))
-          )}
-
-          {sections.executed.length > 0 ? (
-            <Pressable accessibilityRole="button" onPress={onToggleHistory} style={styles.foldHead}>
-              <Text style={styles.sectionTitle}>
-                {`${isHistoryOpen ? "▾" : "▸"} ${t("drafts.sections.ranHere")} (${sections.executed.length})`}
-              </Text>
+    <DraftsSourceProvider source={source}>
+      <View testID="scratchpad-panel" style={styles.container}>
+        <View style={styles.listPane}>
+          <View style={styles.sectionHead}>
+            <Text style={styles.sectionTitle}>{t("drafts.sections.planned")}</Text>
+            <View style={styles.spacer} />
+            <Pressable
+              accessibilityRole="button"
+              testID="scratchpad-new-draft"
+              onPress={onCreate}
+              style={newButtonStyle}
+            >
+              <Text style={styles.newButtonLabel}>{t("drafts.actions.newDraft")}</Text>
             </Pressable>
-          ) : null}
+          </View>
 
-          {isHistoryOpen
-            ? sections.executed.map((artifact) => (
-                <HistoryRow
+          <ScrollView>
+            {sections.planned.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyTitle}>{t("drafts.empty.plannedTitle")}</Text>
+                <Text style={styles.emptyHint}>{t("drafts.empty.plannedHint")}</Text>
+              </View>
+            ) : (
+              sections.planned.map((artifact) => (
+                <DraftRow
                   key={artifact.id}
                   artifact={artifact}
-                  workspaceId={workspaceId}
-                  lookup={lookup}
+                  isSelected={artifact.id === selectedId}
+                  isSecondary={isProjectLevelPlanFor(artifact, workspaceId, lookup)}
                   onSelect={setSelectedId}
                 />
               ))
-            : null}
-        </ScrollView>
-      </View>
+            )}
 
-      <View style={styles.editorPane}>
-        {selected ? (
-          <DraftEditor key={selected.id} artifact={selected} serverId={serverId} />
-        ) : (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyHint}>{t("drafts.empty.pickDraft")}</Text>
-          </View>
-        )}
+            {sections.executed.length > 0 ? (
+              <Pressable
+                accessibilityRole="button"
+                onPress={onToggleHistory}
+                style={styles.foldHead}
+              >
+                <Text style={styles.sectionTitle}>
+                  {`${isHistoryOpen ? "▾" : "▸"} ${t("drafts.sections.ranHere")} (${sections.executed.length})`}
+                </Text>
+              </Pressable>
+            ) : null}
+
+            {isHistoryOpen
+              ? sections.executed.map((artifact) => (
+                  <HistoryRow
+                    key={artifact.id}
+                    artifact={artifact}
+                    workspaceId={workspaceId}
+                    lookup={lookup}
+                    onSelect={setSelectedId}
+                  />
+                ))
+              : null}
+          </ScrollView>
+        </View>
+
+        <View style={styles.editorPane}>
+          {selected ? (
+            <DraftEditor key={selected.id} artifact={selected} serverId={serverId} />
+          ) : (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyHint}>{t("drafts.empty.pickDraft")}</Text>
+            </View>
+          )}
+        </View>
       </View>
-    </View>
+    </DraftsSourceProvider>
   );
 }
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DraftArtifactUpdateSchema,
-  DraftSendRevisionResponseSchema,
+  DraftCaptureRevisionResponseSchema,
   DraftUpsertArtifactRequestSchema,
 } from "./draft/rpc-schemas";
 import { ArtifactRecordSchema } from "./draft/types";
@@ -48,10 +48,18 @@ describe("draft protocol", () => {
       },
       { type: "draft.get_snapshot.request", requestId: "r6", artifactId: artifact.id, rev: 2 },
       {
-        type: "draft.send_revision.request",
+        type: "draft.capture_revision.request",
         requestId: "r7",
         artifactId: artifact.id,
         target: { kind: "new_agent", workspaceId: "ws-1" },
+      },
+      {
+        type: "draft.settle_dispatch.request",
+        requestId: "r8",
+        artifactId: artifact.id,
+        dispatchId: "dsp_1",
+        status: "sent",
+        agentId: "agent-1",
       },
     ];
     for (const request of requests) {
@@ -89,8 +97,18 @@ describe("draft protocol", () => {
         },
       },
       {
-        type: "draft.send_revision.response",
-        payload: { requestId: "r7", artifact, dispatch: null, error: null },
+        type: "draft.capture_revision.response",
+        payload: {
+          requestId: "r7",
+          artifact,
+          snapshot: { rev: 3, createdAt: artifact.createdAt, body: artifact.body },
+          dispatch: null,
+          error: null,
+        },
+      },
+      {
+        type: "draft.settle_dispatch.response",
+        payload: { requestId: "r8", dispatch: null, error: null },
       },
     ];
     for (const response of responses) {
@@ -138,14 +156,15 @@ describe("draft protocol", () => {
     expect(ArtifactRecordSchema.safeParse({ ...artifact, addedLater: 1 }).success).toBe(true);
   });
 
-  it("keeps a stale write out of the error channel", () => {
-    // A conflict is a normal response carrying the record as it stands, so the
-    // client can offer reload-or-overwrite without a second round trip.
-    const parsed = DraftSendRevisionResponseSchema.safeParse({
-      type: "draft.send_revision.response",
+  it("treats a pending dispatch as a real answer", () => {
+    // Nothing has been sent yet — the client still has to call createAgent and
+    // then settle. `pending` is what is known, not a failure.
+    const parsed = DraftCaptureRevisionResponseSchema.safeParse({
+      type: "draft.capture_revision.response",
       payload: {
         requestId: "r1",
         artifact,
+        snapshot: { rev: 3, createdAt: artifact.createdAt, body: artifact.body },
         dispatch: {
           id: "dsp_1",
           rev: 3,

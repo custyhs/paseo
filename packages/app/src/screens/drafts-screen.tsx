@@ -4,7 +4,8 @@ import { StyleSheet } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import { MenuHeader } from "@/components/headers/menu-header";
 import { SearchField } from "@/components/ui/search-field";
-import { useAllDrafts, useDraftsSource } from "@/drafts/context";
+import { DraftsSourceProvider, useAllDrafts } from "@/drafts/context";
+import { useHostDraftsSource } from "@/drafts/use-host-source";
 import { DraftEditor } from "@/drafts/draft-editor";
 import { draftDisplayTitle, plannedTargetKey, type ArtifactDetail } from "@/drafts/model";
 import { describeWorkspace, useAllWorkspaces } from "@/drafts/workspaces";
@@ -98,7 +99,9 @@ export function DraftsScreen() {
   const sessions = useSessionStore((state) => state.sessions);
   const workspaces = useAllWorkspaces();
   const serverId = useMemo(() => Object.keys(sessions)[0] ?? "", [sessions]);
-  const source = useDraftsSource();
+  // Resolved once here and supplied to everything below, so the editor and the
+  // sheets do not each re-derive which host they are talking to.
+  const source = useHostDraftsSource(serverId);
   const { artifacts } = useAllDrafts(source);
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -211,13 +214,15 @@ export function DraftsScreen() {
   );
 
   return (
-    <View testID="drafts-screen" style={styles.container}>
-      <MenuHeader title={t("drafts.list.title")} />
-      <View style={isCompact ? styles.bodyCompact : styles.body}>
-        {showList ? list : null}
-        {showEditor ? editorPane : null}
+    <DraftsSourceProvider source={source}>
+      <View testID="drafts-screen" style={styles.container}>
+        <MenuHeader title={t("drafts.list.title")} />
+        <View style={isCompact ? styles.bodyCompact : styles.body}>
+          {showList ? list : null}
+          {showEditor ? editorPane : null}
+        </View>
       </View>
-    </View>
+    </DraftsSourceProvider>
   );
 }
 

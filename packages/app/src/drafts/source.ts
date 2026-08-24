@@ -23,7 +23,13 @@ export interface DraftListQuery {
 }
 
 export type SendTarget =
-  | { kind: "new_agent"; workspaceId: string }
+  /**
+   * `provider` is required because sending has to run something, and choosing
+   * what is this side's business — the daemon deliberately does not orchestrate
+   * the send (ADR-0003), so nothing downstream can supply a default. Requiring
+   * it here makes a send path that forgot to ask a compile error.
+   */
+  | { kind: "new_agent"; workspaceId: string; provider: string; model?: string | null }
   | { kind: "existing_agent"; agentId: string; workspaceId: string };
 
 export interface SendResult {

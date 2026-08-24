@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type pino from "pino";
 import type { SessionInboundMessage, SessionOutboundMessage } from "../../messages.js";
 import {
@@ -79,6 +80,10 @@ export class DraftSession {
         return this.handleSetArchived(storage, request);
       case "draft.get_snapshot.request":
         return this.handleGetSnapshot(storage, request);
+      case "draft.capture_revision.request":
+        return this.handleCaptureRevision(storage, request);
+      case "draft.settle_dispatch.request":
+        return this.handleSettleDispatch(storage, request);
       default:
         return undefined;
     }
@@ -221,6 +226,88 @@ export class DraftSession {
       });
     } catch (error) {
       this.emitRpcError(request, error);
+    }
+  }
+
+  /**
+   * Freezes the current body and records the intent to send it. The client then
+   * calls `createAgent` or `sendMessage` itself, carrying the `clientMessageId`
+   * this returns, and settles afterwards — see ADR-0003 for why the middle step
+   * is not ours.
+   */
+  private async handleCaptureRevision(
+    storage: DraftStorage,
+    request: Extract<DraftInbound, { type: "draft.capture_revision.request" }>,
+  ): Promise<void> {
+    try {
+      const snapshot = await storage.captureSnapshot({ artifactId: request.artifactId });
+      const dispatch = await storage.recordDispatch({
+        artifactId: request.artifactId,
+        rev: snapshot.rev,
+        clientMessageId: randomUUID(),
+        workspaceId: request.target.workspaceId,
+        agentId: request.target.kind === "existing_agent" ? request.target.agentId : null,
+        status: "pending",
+      });
+      const detail = await storage.get(request.artifactId);
+      this.host.emit({
+        type: "draft.capture_revision.response",
+        payload: {
+          requestId: request.requestId,
+          artifact: detail ? toRecord(detail) : null,
+          snapshot,
+          dispatch,
+          error: null,
+        },
+      });
+    } catch (error) {
+      if (error instanceof ArtifactNotFoundError) {
+        this.host.emit({
+          type: "draft.capture_revision.response",
+          payload: {
+            requestId: request.requestId,
+            artifact: null,
+            snapshot: null,
+            dispatch: null,
+            error: error.message,
+          },
+        });
+        return;
+      }
+      this.emitRpcError(request, error);
+    }
+  }
+
+  /**
+   * What became of the send. Appended, never rewritten — a failed send keeps its
+   * snapshot and gains a `failed` dispatch, because the snapshot is what the
+   * user meant to send and that is worth more, not less, when it did not arrive.
+   */
+  private async handleSettleDispatch(
+    storage: DraftStorage,
+    request: Extract<DraftInbound, { type: "draft.settle_dispatch.request" }>,
+  ): Promise<void> {
+    try {
+      const dispatch = await storage.settleDispatch({
+        artifactId: request.artifactId,
+        dispatchId: request.dispatchId,
+        status: request.status,
+        ...(request.agentId !== undefined ? { agentId: request.agentId } : {}),
+        ...(request.error !== undefined ? { error: request.error } : {}),
+      });
+      this.host.emit({
+        type: "draft.settle_dispatch.response",
+        payload: { requestId: request.requestId, dispatch, error: null },
+      });
+    } catch (error) {
+      this.host.emit({
+        type: "draft.settle_dispatch.response",
+        payload: {
+          requestId: request.requestId,
+          dispatch: null,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
     }
   }
 

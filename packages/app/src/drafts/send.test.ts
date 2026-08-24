@@ -40,7 +40,7 @@ describe("send flow end to end", () => {
 
     await source.send({
       artifactId: created.id,
-      target: { kind: "new_agent", workspaceId: "ws_main" },
+      target: { kind: "new_agent", workspaceId: "ws_main", provider: "claude" },
     });
     const afterSend = await detail(source, created.id);
     expect(isPlannedFor(afterSend, "ws_main", lookup)).toBe(false);
@@ -74,7 +74,7 @@ describe("send flow end to end", () => {
     });
     await source.send({
       artifactId: created.id,
-      target: { kind: "new_agent", workspaceId: "ws_main" },
+      target: { kind: "new_agent", workspaceId: "ws_main", provider: "claude" },
     });
 
     const second = await source.update({
@@ -111,7 +111,7 @@ describe("send flow end to end", () => {
     });
     await source.send({
       artifactId: created.id,
-      target: { kind: "new_agent", workspaceId: "ws_main" },
+      target: { kind: "new_agent", workspaceId: "ws_main", provider: "claude" },
     });
     await source.send({
       artifactId: created.id,
@@ -144,7 +144,7 @@ describe("send flow end to end", () => {
     expect(isPlannedFor(await detail(source, created.id), "ws_main", lookup)).toBe(true);
     await source.send({
       artifactId: created.id,
-      target: { kind: "new_agent", workspaceId: "ws_neo" },
+      target: { kind: "new_agent", workspaceId: "ws_neo", provider: "claude" },
     });
     expect(isPlannedFor(await detail(source, created.id), "ws_main", lookup)).toBe(false);
   });
@@ -156,7 +156,7 @@ describe("send flow end to end", () => {
     });
     await source.send({
       artifactId: created.id,
-      target: { kind: "new_agent", workspaceId: "ws_main" },
+      target: { kind: "new_agent", workspaceId: "ws_main", provider: "claude" },
     });
     await source.update({
       artifactId: created.id,

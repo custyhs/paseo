@@ -250,7 +250,7 @@ describe("MockDraftsSource matches the contract the real store enforces", () => 
     });
     const { artifact: sent } = await source.send({
       artifactId: created.id,
-      target: { kind: "new_agent", workspaceId: "ws_main" },
+      target: { kind: "new_agent", workspaceId: "ws_main", provider: "claude" },
     });
     expect(sent.snapshots).toHaveLength(1);
     expect(sent.snapshots[0]?.rev).toBe(written.version);
@@ -270,7 +270,7 @@ describe("MockDraftsSource matches the contract the real store enforces", () => 
     const created = await source.create();
     await source.send({
       artifactId: created.id,
-      target: { kind: "new_agent", workspaceId: "ws_main" },
+      target: { kind: "new_agent", workspaceId: "ws_main", provider: "claude" },
     });
     const { artifact: second } = await source.send({
       artifactId: created.id,

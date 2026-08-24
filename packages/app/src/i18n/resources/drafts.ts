@@ -56,6 +56,7 @@ const en = {
   send: {
     title: "Send this revision",
     subtitle: "A byte-exact snapshot is captured now. The draft stays editable.",
+    withProvider: "Send with",
     plannedTag: "Planned",
     newAgentIn: "New agent in {{where}}",
     newAgentSubtitle: "Starts a fresh session with this revision",
@@ -140,6 +141,7 @@ const zhCN: typeof en = {
   send: {
     title: "发送这个修订版",
     subtitle: "现在捕获一份逐字节精确的快照。草稿之后仍可编辑。",
+    withProvider: "使用",
     plannedTag: "已预定",
     newAgentIn: "在 {{where}} 起新 agent",
     newAgentSubtitle: "用这个修订版开一个新会话",

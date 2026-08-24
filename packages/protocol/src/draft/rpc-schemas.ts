@@ -126,23 +126,62 @@ export const DraftGetSnapshotResponseSchema = z.object({
   }),
 });
 
-/** Captures the revision as an immutable snapshot and dispatches it. ADR-0003. */
-export const DraftSendRevisionRequestSchema = z.object({
-  type: z.literal("draft.send_revision.request"),
+/**
+ * Sending is two RPCs with the client's own call to `createAgent` or
+ * `sendMessage` in between, not one call that does everything. ADR-0003:
+ * choosing a provider and model is a whole existing surface in the app, and
+ * putting the orchestration in the daemon would mean rebuilding it there.
+ *
+ * First half: freeze the current body as revision `version` and record the
+ * intent to send it. Idempotent — asking twice for the same revision returns the
+ * snapshot already on disk, because rewriting one would break both the
+ * immutability guarantee and the sync layout that rests on it.
+ */
+export const DraftCaptureRevisionRequestSchema = z.object({
+  type: z.literal("draft.capture_revision.request"),
   requestId: z.string(),
   artifactId: z.string(),
   target: DraftSendTargetSchema,
 });
 
-export const DraftSendRevisionResponseSchema = z.object({
-  type: z.literal("draft.send_revision.response"),
+export const DraftCaptureRevisionResponseSchema = z.object({
+  type: z.literal("draft.capture_revision.response"),
   payload: z.object({
     requestId: z.string(),
     artifact: ArtifactRecordSchema.nullable(),
+    snapshot: SnapshotRecordSchema.nullable(),
     /**
-     * The dispatch as it stands. `status: "pending"` is a real answer, not a
-     * failure — the send left, and its result is not known yet.
+     * Carries the `clientMessageId` to pass to `createAgent`/`sendMessage`, and
+     * the `id` to settle afterwards. `status: "pending"` is a real answer, not a
+     * failure — nothing has been sent yet, and the record says so.
      */
+    dispatch: DispatchRecordSchema.nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
+/**
+ * Second half: what became of the send. Appended rather than rewritten, so the
+ * log stays append-only and a crash can lose at most the last line.
+ *
+ * A client that captures and then never settles leaves a permanent pending
+ * dispatch. That is a correct record of what is known, and the UI says so; it is
+ * not a state the daemon can resolve on the client's behalf.
+ */
+export const DraftSettleDispatchRequestSchema = z.object({
+  type: z.literal("draft.settle_dispatch.request"),
+  requestId: z.string(),
+  artifactId: z.string(),
+  dispatchId: z.string(),
+  status: z.enum(["sent", "failed"]),
+  agentId: z.string().nullable().optional(),
+  error: z.string().nullable().optional(),
+});
+
+export const DraftSettleDispatchResponseSchema = z.object({
+  type: z.literal("draft.settle_dispatch.response"),
+  payload: z.object({
+    requestId: z.string(),
     dispatch: DispatchRecordSchema.nullable(),
     error: z.string().nullable(),
   }),
@@ -180,6 +219,8 @@ export type DraftSetArchivedRequest = z.infer<typeof DraftSetArchivedRequestSche
 export type DraftSetArchivedResponse = z.infer<typeof DraftSetArchivedResponseSchema>;
 export type DraftGetSnapshotRequest = z.infer<typeof DraftGetSnapshotRequestSchema>;
 export type DraftGetSnapshotResponse = z.infer<typeof DraftGetSnapshotResponseSchema>;
-export type DraftSendRevisionRequest = z.infer<typeof DraftSendRevisionRequestSchema>;
-export type DraftSendRevisionResponse = z.infer<typeof DraftSendRevisionResponseSchema>;
+export type DraftCaptureRevisionRequest = z.infer<typeof DraftCaptureRevisionRequestSchema>;
+export type DraftCaptureRevisionResponse = z.infer<typeof DraftCaptureRevisionResponseSchema>;
+export type DraftSettleDispatchRequest = z.infer<typeof DraftSettleDispatchRequestSchema>;
+export type DraftSettleDispatchResponse = z.infer<typeof DraftSettleDispatchResponseSchema>;
 export type DraftArtifactUpdate = z.infer<typeof DraftArtifactUpdateSchema>;

@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { Pressable, Text, View, type PressableStateCallbackType } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
@@ -6,11 +6,19 @@ import { AdaptiveModalSheet } from "@/components/adaptive-modal-sheet";
 import type { ArtifactDetail } from "./model";
 import { describeWorkspace, useServerAgents, useServerWorkspaces } from "./workspaces";
 import type { SendTarget } from "./source";
+import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
+import { buildSelectableProviderSelectorProviders } from "@/provider-selection/provider-selection";
 
 /**
  * Picks where a revision goes. Planned targets come first and are marked, which
  * is the payoff that makes planning worth maintaining: the target you already
  * declared is the one already selected.
+ *
+ * A new agent also has to run something, and the daemon does not decide that for
+ * us (ADR-0003). One selector at the top rather than a row per workspace times
+ * provider, which on a host with several of each would be a wall of rows; it
+ * only applies to the "new agent" rows, since an existing agent already has a
+ * provider.
  */
 
 interface TargetOption {
@@ -23,6 +31,40 @@ interface TargetOption {
 
 function optionStyle({ pressed }: PressableStateCallbackType) {
   return [styles.option, pressed && styles.pressed];
+}
+
+const ProviderChip = memo(function ProviderChip({
+  id,
+  label,
+  isSelected,
+  onSelect,
+}: {
+  id: string;
+  label: string;
+  isSelected: boolean;
+  onSelect: (id: string) => void;
+}) {
+  const onPress = useCallback(() => onSelect(id), [id, onSelect]);
+  const selectedState = useMemo(() => ({ selected: isSelected }), [isSelected]);
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={selectedState}
+      testID={`draft-send-provider-${id}`}
+      onPress={onPress}
+      style={isSelected ? selectedChipStyle : chipStyle}
+    >
+      <Text style={isSelected ? styles.chipLabelSelected : styles.chipLabel}>{label}</Text>
+    </Pressable>
+  );
+});
+
+function chipStyle({ pressed }: PressableStateCallbackType) {
+  return [styles.chip, pressed && styles.pressed];
+}
+
+function selectedChipStyle({ pressed }: PressableStateCallbackType) {
+  return [styles.chip, styles.chipSelected, pressed && styles.pressed];
 }
 
 const TargetRow = memo(function TargetRow({
@@ -63,6 +105,24 @@ export function SendSheet({
   const { t } = useTranslation();
   const workspaces = useServerWorkspaces(serverId);
   const agents = useServerAgents(serverId);
+  const { entries } = useProvidersSnapshot(serverId, { enabled: visible });
+  const providers = useMemo(() => buildSelectableProviderSelectorProviders(entries), [entries]);
+  const [chosenProvider, setChosenProvider] = useState<string | null>(null);
+  // Falls back to the first available rather than refusing to send: picking is
+  // worth offering, not worth blocking on.
+  const provider = chosenProvider ?? providers[0]?.id ?? null;
+
+  const onSelect = useCallback(
+    (target: SendTarget) => {
+      if (target.kind !== "new_agent") {
+        onSend(target);
+        return;
+      }
+      if (!provider) return;
+      onSend({ ...target, provider });
+    },
+    [onSend, provider],
+  );
 
   const options = useMemo<TargetOption[]>(() => {
     const plannedWorkspaceIds = new Set(
@@ -89,7 +149,8 @@ export function SendSheet({
       rows.push({
         rank: workspaceRank,
         key: `new:${workspace.id}`,
-        target: { kind: "new_agent", workspaceId: workspace.id },
+        // The provider is filled in on the way out, from the selector above.
+        target: { kind: "new_agent", workspaceId: workspace.id, provider: "" },
         title: t("drafts.send.newAgentIn", { where }),
         subtitle: t("drafts.send.newAgentSubtitle"),
         isPlanned: workspaceRank < 2,
@@ -119,10 +180,24 @@ export function SendSheet({
 
   return (
     <AdaptiveModalSheet header={header} visible={visible} onClose={onClose} scrollable>
+      {providers.length > 1 ? (
+        <View style={styles.providerRow}>
+          <Text style={styles.providerLabel}>{t("drafts.send.withProvider")}</Text>
+          {providers.map((entry) => (
+            <ProviderChip
+              key={entry.id}
+              id={entry.id}
+              label={entry.label}
+              isSelected={entry.id === provider}
+              onSelect={setChosenProvider}
+            />
+          ))}
+        </View>
+      ) : null}
       {options.length === 0 ? (
         <Text style={styles.optionSubtitle}>{t("drafts.send.noTargets")}</Text>
       ) : (
-        options.map((option) => <TargetRow key={option.key} option={option} onSelect={onSend} />)
+        options.map((option) => <TargetRow key={option.key} option={option} onSelect={onSelect} />)
       )}
     </AdaptiveModalSheet>
   );
@@ -140,4 +215,22 @@ const styles = StyleSheet.create((theme) => ({
   optionTitle: { flex: 1, fontSize: theme.fontSize.base, color: theme.colors.foreground },
   optionSubtitle: { fontSize: theme.fontSize.sm, color: theme.colors.foregroundMuted },
   plannedTag: { fontSize: theme.fontSize.sm, color: theme.colors.accentBright },
+  providerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: theme.spacing[1],
+    paddingBottom: theme.spacing[2],
+  },
+  providerLabel: { fontSize: theme.fontSize.sm, color: theme.colors.foregroundMuted },
+  chip: {
+    paddingHorizontal: theme.spacing[2],
+    paddingVertical: theme.spacing[0.5],
+    borderRadius: theme.borderRadius.full,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  chipSelected: { borderColor: theme.colors.accentBright },
+  chipLabel: { fontSize: theme.fontSize.sm, color: theme.colors.foregroundMuted },
+  chipLabelSelected: { fontSize: theme.fontSize.sm, color: theme.colors.foreground },
 }));

@@ -135,6 +135,7 @@ import type {
 import type {
   ArtifactRecord,
   DispatchRecord,
+  DraftSendTarget,
   PlannedTarget,
   SnapshotRecord,
 } from "@getpaseo/protocol/draft/types";
@@ -5166,6 +5167,63 @@ export class DaemonClient {
       responseType: "draft.get_snapshot.response",
     });
     return snapshot;
+  }
+
+  /**
+   * Freezes the draft's current body as a revision and records the intent to
+   * send it. The caller then makes its own `createAgent` or `sendMessage` call
+   * carrying `dispatch.clientMessageId`, and calls `settleDraftDispatch` with
+   * what happened. Sending is not one call because choosing a provider and model
+   * is the caller's surface, not the daemon's — ADR-0003.
+   */
+  async captureDraftRevision(input: { artifactId: string; target: DraftSendTarget }): Promise<{
+    artifact: ArtifactRecord;
+    snapshot: SnapshotRecord;
+    dispatch: DispatchRecord;
+  }> {
+    const { artifact, snapshot, dispatch, error } = await this.sendCorrelatedSessionRequest({
+      message: {
+        type: "draft.capture_revision.request",
+        requestId: this.createRequestId(),
+        artifactId: input.artifactId,
+        target: input.target,
+      },
+      responseType: "draft.capture_revision.response",
+    });
+    if (error || !artifact || !snapshot || !dispatch) {
+      throw new Error(error ?? `Draft ${input.artifactId} could not be captured`);
+    }
+    return { artifact, snapshot, dispatch };
+  }
+
+  /**
+   * Call this even when the send failed. A dispatch that is never settled stays
+   * pending forever, which is an honest record of what is known but a poor one
+   * to leave behind when the answer is available.
+   */
+  async settleDraftDispatch(input: {
+    artifactId: string;
+    dispatchId: string;
+    status: "sent" | "failed";
+    agentId?: string | null;
+    error?: string | null;
+  }): Promise<DispatchRecord> {
+    const { dispatch, error } = await this.sendCorrelatedSessionRequest({
+      message: {
+        type: "draft.settle_dispatch.request",
+        requestId: this.createRequestId(),
+        artifactId: input.artifactId,
+        dispatchId: input.dispatchId,
+        status: input.status,
+        ...(input.agentId !== undefined ? { agentId: input.agentId } : {}),
+        ...(input.error !== undefined ? { error: input.error } : {}),
+      },
+      responseType: "draft.settle_dispatch.response",
+    });
+    if (error || !dispatch) {
+      throw new Error(error ?? `Dispatch ${input.dispatchId} could not be settled`);
+    }
+    return dispatch;
   }
 
   async getAgentSkillsStatus(): Promise<AgentSkillsStatus> {
