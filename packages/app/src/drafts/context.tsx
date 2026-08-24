@@ -1,7 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { MockDraftsSource } from "./mock-source";
 import type { ArtifactDetail } from "./model";
-import type { DraftsSource } from "./source";
+import type { DraftSearchHit, DraftsSource } from "./source";
+import type { DraftHost } from "./use-host-source";
 
 /**
  * Supplies the drafts UI with its data source. The provider exists so the
@@ -14,6 +15,9 @@ import type { DraftsSource } from "./source";
  */
 
 const DraftsSourceContext = createContext<DraftsSource | null>(null);
+
+/** A pause earns a round trip. Same interval the editor uses for writes (D26). */
+const DRAFT_SEARCH_DEBOUNCE_MS = 200;
 
 function seedArtifacts(): ArtifactDetail[] {
   const day = (value: string) => `2026-08-${value}T12:00:00.000Z`;
@@ -140,11 +144,124 @@ export interface DraftsQueryState {
   isLoading: boolean;
 }
 
+/** A draft plus the host that stores it, so an action can be routed back. */
+export interface HostedDraft {
+  serverId: string;
+  source: DraftsSource;
+  artifact: ArtifactDetail;
+}
+
+export interface HostedDraftsQueryState {
+  drafts: HostedDraft[];
+  isLoading: boolean;
+}
+
 /**
  * Reads every draft and re-reads on any mutation. Fine at this corpus size and
  * deliberately dumb: pagination and incremental updates are the daemon-backed
  * implementation's problem, not a shape the UI should be built around.
  */
+/**
+ * Every draft on every connected host that has the domain (D19).
+ *
+ * One host failing does not empty the list — its drafts are simply missing
+ * while the others are shown, which is the same bargain the sidebar makes.
+ * A host that is down is a host whose drafts nobody can reach anyway.
+ */
+export function useDraftsAcrossHosts(hosts: DraftHost[]): HostedDraftsQueryState {
+  const [state, setState] = useState<HostedDraftsQueryState>({ drafts: [], isLoading: true });
+  // The array identity changes on every store read; the hosts it names do not.
+  const key = hosts.map((host) => host.serverId).join("\u0000");
+
+  useEffect(() => {
+    let cancelled = false;
+    const read = async () => {
+      const perHost = await Promise.all(
+        hosts.map(async ({ serverId, source }) => {
+          try {
+            // Archived ones come down too: the list hides them, but search has
+            // to be able to surface them (ADR-0005 decision 4), and that is a
+            // decision for the screen rather than the transport.
+            const summaries = await source.list({ includeArchived: true });
+            const details = await Promise.all(summaries.map((entry) => source.get(entry.id)));
+            return details
+              .filter((entry): entry is ArtifactDetail => entry !== null)
+              .map((artifact) => ({ serverId, source, artifact }));
+          } catch {
+            return [];
+          }
+        }),
+      );
+      if (cancelled) return;
+      setState({ drafts: perHost.flat(), isLoading: false });
+    };
+    void read();
+    const unsubscribes = hosts.map((host) =>
+      host.source.subscribe(() => {
+        void read();
+      }),
+    );
+    return () => {
+      cancelled = true;
+      for (const unsubscribe of unsubscribes) unsubscribe();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+
+  return state;
+}
+
+export interface HostedSearchHit {
+  serverId: string;
+  hit: DraftSearchHit;
+}
+
+/**
+ * Runs the query on every host and merges. Empty query means "not searching" —
+ * the caller shows its ordinary list rather than an empty result set.
+ *
+ * Debounced on a pause rather than a keystroke, the same 200ms the editor's
+ * writes use, because a search is a round trip and a paragraph typed quickly
+ * would otherwise be a paragraph of round trips.
+ */
+export function useDraftSearch(hosts: DraftHost[], query: string): HostedSearchHit[] {
+  const [hits, setHits] = useState<HostedSearchHit[]>([]);
+  const key = hosts.map((host) => host.serverId).join("\u0000");
+
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setHits([]);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      const run = async () => {
+        const searchOne = async ({ serverId, source }: DraftHost): Promise<HostedSearchHit[]> => {
+          try {
+            const found = await source.search({ query: trimmed });
+            return found.map((hit) => ({ serverId, hit }));
+          } catch {
+            // One host being unreachable narrows the results; it does not empty
+            // them. Its drafts were unreachable anyway.
+            return [];
+          }
+        };
+        const perHost = await Promise.all(hosts.map(searchOne));
+        if (!cancelled) setHits(perHost.flat());
+      };
+      void run();
+    }, DRAFT_SEARCH_DEBOUNCE_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, query]);
+
+  return hits;
+}
+
 export function useAllDrafts(source: DraftsSource): DraftsQueryState {
   const [state, setState] = useState<DraftsQueryState>({ artifacts: [], isLoading: true });
 

@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
-import { useHostRuntimeClient } from "@/runtime/host-runtime";
+import { useHostRuntimeClient, getHostRuntimeStore } from "@/runtime/host-runtime";
 import { useSessionStore, type WorkspaceDescriptor } from "@/stores/session-store";
 import { buildWorkspaceDraftAgentConfig } from "@/screens/workspace/workspace-draft-agent-config";
 import { getSharedMockDraftsSource } from "./context";
@@ -26,14 +26,62 @@ export function useHostDraftsSource(serverId: string | null): DraftsSource {
     // Until a host has the domain, the screens keep running on the mock rather
     // than showing nothing — the two surfaces are still worth developing against.
     if (!serverId || !client || !supportsDrafts) return getSharedMockDraftsSource();
-    return buildDaemonSource({ client, workspaces });
+    return sourceFor({ serverId, client, workspaces });
   }, [client, serverId, supportsDrafts, workspaces]);
 }
 
-function buildDaemonSource(input: {
+/** One host that has drafts, and the source that talks to it. */
+export interface DraftHost {
+  serverId: string;
+  source: DraftsSource;
+}
+
+/**
+ * Every connected host that has the domain.
+ *
+ * The Drafts destination spans hosts the way the sidebar and History do: a
+ * draft belongs to the daemon that stores it, and a list that quietly showed
+ * only one host's would be wrong without ever saying so. D19.
+ *
+ * Sources cannot come from a hook per host — the host list is dynamic — so they
+ * are cached by (serverId, client). The client identity is part of the key
+ * because a reconnect hands out a new one, and a source bound to the old client
+ * would talk to a socket nobody is listening on.
+ */
+export function useDraftHosts(): DraftHost[] {
+  const sessions = useSessionStore((state) => state.sessions);
+  return useMemo(() => {
+    const hosts: DraftHost[] = [];
+    for (const [serverId, session] of Object.entries(sessions)) {
+      if (session.serverInfo?.features?.drafts !== true) continue;
+      const client = getHostRuntimeStore().getSnapshot(serverId)?.client;
+      if (!client) continue;
+      hosts.push({
+        serverId,
+        source: sourceFor({ serverId, client, workspaces: session.workspaces }),
+      });
+    }
+    return hosts;
+  }, [sessions]);
+}
+
+interface SourceInput {
+  serverId: string;
   client: DaemonClient;
   workspaces: Map<string, WorkspaceDescriptor> | undefined;
-}): DraftsSource {
+}
+
+const sources = new Map<string, { client: DaemonClient; source: DraftsSource }>();
+
+function sourceFor(input: SourceInput): DraftsSource {
+  const cached = sources.get(input.serverId);
+  if (cached && cached.client === input.client) return cached.source;
+  const source = buildDaemonSource(input);
+  sources.set(input.serverId, { client: input.client, source });
+  return source;
+}
+
+function buildDaemonSource(input: SourceInput): DraftsSource {
   const cwdFor = (workspaceId: string): string => {
     // `workspaceDirectory` is the cwd — the composer's own create path resolves
     // it the same way.

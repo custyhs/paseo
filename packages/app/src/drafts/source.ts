@@ -49,6 +49,18 @@ export class DraftVersionConflictError extends Error {
   }
 }
 
+/**
+ * One place the words were found. A snapshot hit is not the draft's current
+ * text, and the UI has to say so rather than quietly opening the live body.
+ */
+export interface DraftSearchHit {
+  artifactId: string;
+  where: { kind: "artifact" } | { kind: "snapshot"; rev: number };
+  /** Only on snapshot hits — the client has no copy of that revision. */
+  excerpt?: string;
+  archived: boolean;
+}
+
 export interface DraftsSource {
   list(query?: DraftListQuery): Promise<ArtifactSummary[]>;
   get(artifactId: string): Promise<ArtifactDetail | null>;
@@ -73,5 +85,12 @@ export interface DraftsSource {
   discard(artifactId: string): Promise<void>;
   /** Captures the current revision as an immutable snapshot and dispatches it. */
   send(input: { artifactId: string; target: SendTarget }): Promise<SendResult>;
+  /**
+   * Searches current bodies **and every captured revision**. That second half is
+   * why this is a method rather than a filter over `list()`: snapshots never
+   * reach the client (ADR-0002 decision 1), so only whoever holds the files can
+   * answer it.
+   */
+  search(input: { query: string; limit?: number }): Promise<DraftSearchHit[]>;
   subscribe(listener: () => void): () => void;
 }

@@ -139,6 +139,7 @@ import type {
   PlannedTarget,
   SnapshotRecord,
 } from "@getpaseo/protocol/draft/types";
+import type { DraftSearchHit } from "@getpaseo/protocol/draft/rpc-schemas";
 import { isRelayClientWebSocketUrl } from "@getpaseo/protocol/daemon-endpoints";
 import { terminalSubscriptionKey } from "@getpaseo/protocol/terminal-subscription-key";
 import {
@@ -5224,6 +5225,24 @@ export class DaemonClient {
       throw new Error(error ?? `Dispatch ${input.dispatchId} could not be settled`);
     }
     return dispatch;
+  }
+
+  /**
+   * Searches current bodies and every captured revision. Runs on the daemon
+   * because snapshots are not replicated — a paragraph you sent and later edited
+   * away exists only there (ADR-0005).
+   */
+  async searchDrafts(input: { query: string; limit?: number }): Promise<DraftSearchHit[]> {
+    const { hits } = await this.sendCorrelatedSessionRequest({
+      message: {
+        type: "draft.search.request",
+        requestId: this.createRequestId(),
+        query: input.query,
+        ...(input.limit !== undefined ? { limit: input.limit } : {}),
+      },
+      responseType: "draft.search.response",
+    });
+    return hits;
   }
 
   async getAgentSkillsStatus(): Promise<AgentSkillsStatus> {

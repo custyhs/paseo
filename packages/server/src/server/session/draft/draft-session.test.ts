@@ -381,6 +381,108 @@ describe("capturing and settling a send", () => {
   });
 });
 
+/**
+ * Search is the third promise: weeks later, find a thought. What makes it worth
+ * a daemon-side RPC is that it reaches revisions the draft no longer contains.
+ */
+describe("search", () => {
+  async function search(query: string) {
+    await send({ type: "draft.search.request", requestId: "search", query });
+    return lastOfType("draft.search.response").payload.hits;
+  }
+
+  test("finds words in a draft's current text", async () => {
+    await createDraft("make the parser incremental");
+    expect(await search("incremental")).toEqual([
+      expect.objectContaining({ artifactId: ID, where: { kind: "artifact" }, archived: false }),
+    ]);
+  });
+
+  test("finds words the draft no longer contains, in the revision that was sent", async () => {
+    await createDraft("reuse the dirty-range tracker");
+    await send({
+      type: "draft.capture_revision.request",
+      requestId: "capture",
+      artifactId: ID,
+      target: { kind: "new_agent", workspaceId: "ws-1" },
+    });
+    await send({
+      type: "draft.upsert_artifact.request",
+      requestId: "rewrite",
+      artifactId: ID,
+      baseVersion: 1,
+      body: "completely different words now",
+    });
+
+    // The point of the whole feature. Client-side search cannot do this: the
+    // client has the current body and no snapshots.
+    const hits = await search("dirty-range");
+    expect(hits).toHaveLength(1);
+    expect(hits[0]?.where).toEqual({ kind: "snapshot", rev: 1 });
+    expect(hits[0]?.excerpt).toContain("dirty-range");
+  });
+
+  test("does not report a draft twice for words it never lost", async () => {
+    await createDraft("make the parser incremental");
+    await send({
+      type: "draft.capture_revision.request",
+      requestId: "capture",
+      artifactId: ID,
+      target: { kind: "new_agent", workspaceId: "ws-1" },
+    });
+
+    // Snapshot and current body are the same text here; one hit, not two.
+    expect(await search("incremental")).toHaveLength(1);
+  });
+
+  test("an archived draft is found, and says so", async () => {
+    await createDraft("filed away but not gone");
+    await send({
+      type: "draft.set_archived.request",
+      requestId: "archive",
+      artifactId: ID,
+      archived: true,
+    });
+
+    const hits = await search("filed away");
+    expect(hits).toHaveLength(1);
+    // The caller groups on this rather than the daemon hiding it: weeks later is
+    // exactly when an archived draft is worth finding.
+    expect(hits[0]?.archived).toBe(true);
+  });
+
+  test("only the excerpt of a snapshot crosses the wire, not its body", async () => {
+    const long = `${"filler ".repeat(200)}needle ${"filler ".repeat(200)}`;
+    await createDraft(long);
+    await send({
+      type: "draft.capture_revision.request",
+      requestId: "capture",
+      artifactId: ID,
+      target: { kind: "new_agent", workspaceId: "ws-1" },
+    });
+    await send({
+      type: "draft.upsert_artifact.request",
+      requestId: "rewrite",
+      artifactId: ID,
+      baseVersion: 1,
+      body: "gone",
+    });
+
+    const hits = await search("needle");
+    const excerpt = hits[0]?.excerpt ?? "";
+    expect(excerpt).toContain("needle");
+    // A spec sent twenty times is twenty copies of its body; sending them back
+    // for a search result would defeat pulling snapshots on demand.
+    expect(excerpt.length).toBeLessThan(long.length / 2);
+  });
+
+  test("a query that matches nothing is an empty list, not an error", async () => {
+    await createDraft("make the parser incremental");
+    expect(await search("nothing like this")).toEqual([]);
+    expect(emitted.some((msg) => msg.type === "rpc_error")).toBe(false);
+  });
+});
+
 describe("pushes", () => {
   test("a write by anyone reaches this client", async () => {
     session.start();

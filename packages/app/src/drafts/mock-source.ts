@@ -8,6 +8,7 @@ import {
 import {
   DraftVersionConflictError,
   type DraftListQuery,
+  type DraftSearchHit,
   type DraftsSource,
   type SendResult,
   type SendTarget,
@@ -80,6 +81,38 @@ export class MockDraftsSource implements DraftsSource {
   async get(artifactId: string): Promise<ArtifactDetail | null> {
     const artifact = this.artifacts.get(artifactId);
     return artifact ? structuredClone(artifact) : null;
+  }
+
+  /**
+   * The mock searches the same two places the daemon does, so a screen built
+   * against it behaves the same way — including finding a revision whose words
+   * the draft has since lost.
+   */
+  search(input: { query: string; limit?: number }): Promise<DraftSearchHit[]> {
+    const query = input.query.trim().toLowerCase();
+    if (!query) return Promise.resolve([]);
+    const tokens = query.split(/\s+/).filter(Boolean);
+    const matches = (text: string) => {
+      const haystack = text.toLowerCase();
+      return tokens.every((token) => haystack.includes(token));
+    };
+    const hits: DraftSearchHit[] = [];
+    for (const artifact of this.artifacts.values()) {
+      const archived = artifact.archivedAt !== null;
+      const current = matches(`${artifact.title ?? ""}\n${artifact.body}`);
+      if (current) hits.push({ artifactId: artifact.id, where: { kind: "artifact" }, archived });
+      for (const snapshot of artifact.snapshots) {
+        if (current && snapshot.body === artifact.body) continue;
+        if (!matches(snapshot.body)) continue;
+        hits.push({
+          artifactId: artifact.id,
+          where: { kind: "snapshot", rev: snapshot.rev },
+          excerpt: snapshot.body.slice(0, 180),
+          archived,
+        });
+      }
+    }
+    return Promise.resolve(hits.slice(0, input.limit ?? 50));
   }
 
   getSnapshot(input: { artifactId: string; rev: number }): Promise<ArtifactSnapshot | null> {

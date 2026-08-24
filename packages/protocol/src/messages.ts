@@ -52,6 +52,7 @@ import {
   DraftGetSnapshotRequestSchema,
   DraftCaptureRevisionRequestSchema,
   DraftSettleDispatchRequestSchema,
+  DraftSearchRequestSchema,
   DraftListArtifactsResponseSchema,
   DraftGetArtifactResponseSchema,
   DraftUpsertArtifactResponseSchema,
@@ -60,6 +61,7 @@ import {
   DraftGetSnapshotResponseSchema,
   DraftCaptureRevisionResponseSchema,
   DraftSettleDispatchResponseSchema,
+  DraftSearchResponseSchema,
   DraftArtifactUpdateSchema,
 } from "./draft/rpc-schemas.js";
 import {
@@ -3278,6 +3280,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   DraftGetSnapshotRequestSchema,
   DraftCaptureRevisionRequestSchema,
   DraftSettleDispatchRequestSchema,
+  DraftSearchRequestSchema,
   LoopRunRequestSchema,
   LoopListRequestSchema,
   LoopInspectRequestSchema,
@@ -6680,6 +6683,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   DraftGetSnapshotResponseSchema,
   DraftCaptureRevisionResponseSchema,
   DraftSettleDispatchResponseSchema,
+  DraftSearchResponseSchema,
   DraftArtifactUpdateSchema,
   LoopRunResponseSchema,
   LoopListResponseSchema,

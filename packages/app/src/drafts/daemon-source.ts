@@ -14,6 +14,7 @@ import type {
 import {
   DraftVersionConflictError,
   type DraftListQuery,
+  type DraftSearchHit,
   type DraftsSource,
   type SendResult,
   type SendTarget,
@@ -290,6 +291,10 @@ export class DaemonDraftsSource implements DraftsSource {
       artifact: { ...toSummary(artifact), snapshots: [], dispatches: [] },
       dispatchId: dispatch.id,
     };
+  }
+
+  search(input: { query: string; limit?: number }): Promise<DraftSearchHit[]> {
+    return this.client.searchDrafts(input);
   }
 
   subscribe(listener: () => void): () => void {

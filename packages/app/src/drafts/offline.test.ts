@@ -42,6 +42,9 @@ class UnreachableDaemon implements DraftsSource {
   getSnapshot(input: { artifactId: string; rev: number }) {
     return this.inner.getSnapshot(input);
   }
+  search(input: { query: string; limit?: number }) {
+    return this.inner.search(input);
+  }
   create(input?: { planned?: ArtifactDetail["planned"] }) {
     return this.inner.create(input);
   }

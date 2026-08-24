@@ -188,6 +188,44 @@ export const DraftSettleDispatchResponseSchema = z.object({
 });
 
 /**
+ * Search covers snapshots as well as current bodies, which is the only way the
+ * brief's third promise holds: you sent a paragraph, edited it away, and weeks
+ * later search for those words. Client-side search cannot do it — snapshots are
+ * deliberately not replicated (ADR-0002 decision 1) — so it runs where the files
+ * are. ADR-0005.
+ */
+export const DraftSearchRequestSchema = z.object({
+  type: z.literal("draft.search.request"),
+  requestId: z.string(),
+  query: z.string(),
+  limit: z.number().int().positive().optional(),
+});
+
+export const DraftSearchHitSchema = z.object({
+  artifactId: z.string(),
+  /** Where the words were found. A snapshot hit is not the draft's current text. */
+  where: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("artifact") }),
+    z.object({ kind: z.literal("snapshot"), rev: z.number().int().positive() }),
+  ]),
+  /**
+   * Only on snapshot hits: the client holds every artifact but no snapshot
+   * bodies, so it can highlight its own text and not theirs.
+   */
+  excerpt: z.string().optional(),
+  archived: z.boolean(),
+});
+
+export const DraftSearchResponseSchema = z.object({
+  type: z.literal("draft.search.response"),
+  payload: z.object({
+    requestId: z.string(),
+    query: z.string(),
+    hits: z.array(DraftSearchHitSchema),
+  }),
+});
+
+/**
  * A push, not an RPC pair, so it has no matching `.request`. The shape follows
  * `workspace_update`. `rpc-namespacing.md` asks that a name without a partner be
  * called out where the schema is, so: this is that call-out.
@@ -223,4 +261,7 @@ export type DraftCaptureRevisionRequest = z.infer<typeof DraftCaptureRevisionReq
 export type DraftCaptureRevisionResponse = z.infer<typeof DraftCaptureRevisionResponseSchema>;
 export type DraftSettleDispatchRequest = z.infer<typeof DraftSettleDispatchRequestSchema>;
 export type DraftSettleDispatchResponse = z.infer<typeof DraftSettleDispatchResponseSchema>;
+export type DraftSearchRequest = z.infer<typeof DraftSearchRequestSchema>;
+export type DraftSearchResponse = z.infer<typeof DraftSearchResponseSchema>;
+export type DraftSearchHit = z.infer<typeof DraftSearchHitSchema>;
 export type DraftArtifactUpdate = z.infer<typeof DraftArtifactUpdateSchema>;

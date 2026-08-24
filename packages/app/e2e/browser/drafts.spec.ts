@@ -78,6 +78,55 @@ test.describe("Drafts destination", () => {
     });
   });
 
+  /**
+   * Archiving is reachable and reversible. The control is hover-revealed on web
+   * (`docs/hover.md`), so this also proves the reveal actually works rather than
+   * the row eating the pointer — Playwright hovers for real.
+   */
+  test("a draft can be archived and brought back", async ({ page }) => {
+    await gotoAppShell(page);
+    await shown(page, "sidebar-drafts").click();
+    await expect(shown(page, "drafts-screen")).toBeVisible({ timeout: 30_000 });
+
+    await shown(page, "drafts-new-draft").click();
+    await expect(shown(page, "draft-editor")).toBeVisible({ timeout: 15_000 });
+    const words = `archive me ${Date.now()}`;
+    await shown(page, "draft-body").fill(words);
+    await expect(shown(page, "draft-editor")).toContainText("Saved", { timeout: 15_000 });
+
+    const row = page.getByText(words).filter({ visible: true }).first();
+    await row.hover();
+    const archive = page
+      .getByTestId(/^draft-archive-/)
+      .filter({ visible: true })
+      .first();
+    await archive.click();
+
+    // Gone from the everyday list. Scoped to the list: the editor still holds
+    // the draft you just archived, which is correct and not what is being asked.
+    await expect(shown(page, "drafts-list").getByText(words).filter({ visible: true })).toHaveCount(
+      0,
+      { timeout: 15_000 },
+    );
+
+    // ...but findable by search, in its own group, and reversible from there.
+    await shown(page, "drafts-search").fill(words);
+    const archivedGroup = shown(page, "drafts-archived-group");
+    await expect(archivedGroup).toBeVisible({ timeout: 15_000 });
+    // The control is hover-revealed, so it has to be hovered again here — the
+    // earlier hover was on a different row.
+    await archivedGroup.getByText(words).filter({ visible: true }).first().hover();
+    await archivedGroup
+      .getByTestId(/^draft-archive-/)
+      .filter({ visible: true })
+      .first()
+      .click();
+    await expect(page.getByTestId("drafts-archived-group").filter({ visible: true })).toHaveCount(
+      0,
+      { timeout: 15_000 },
+    );
+  });
+
   test("lists somewhere to plan a draft for", async ({ page, withWorkspace }) => {
     // The picker reads workspaces out of the session store, where they live in a
     // Map. `Object.values()` on a Map yields nothing and type-checks anyway, so

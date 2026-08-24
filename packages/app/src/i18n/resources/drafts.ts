@@ -21,6 +21,8 @@ const en = {
   },
   actions: {
     newDraft: "New draft",
+    archive: "Archive",
+    unarchive: "Unarchive",
     send: "Send this revision",
     addPlan: "Add",
     removePlan: "Remove {{target}}",
@@ -87,6 +89,8 @@ const en = {
     clearSearch: "Clear search",
     empty: "No drafts yet.",
     noMatches: "No drafts match that search.",
+    archivedGroup: "Archived",
+    matchedInRevision: "Found in rev {{rev}}",
   },
   empty: {
     plannedTitle: "Nothing planned here yet",
@@ -108,6 +112,8 @@ const zhCN: typeof en = {
   },
   actions: {
     newDraft: "新建草稿",
+    archive: "归档",
+    unarchive: "取消归档",
     send: "发送这个修订版",
     addPlan: "添加",
     removePlan: "移除 {{target}}",
@@ -174,6 +180,8 @@ const zhCN: typeof en = {
     clearSearch: "清除搜索",
     empty: "还没有草稿。",
     noMatches: "没有匹配的草稿。",
+    archivedGroup: "已归档",
+    matchedInRevision: "命中于 rev {{rev}}",
   },
   empty: {
     plannedTitle: "这里还没有计划中的草稿",

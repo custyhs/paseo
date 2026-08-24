@@ -1,5 +1,12 @@
 import { randomUUID } from "node:crypto";
 import type pino from "pino";
+import {
+  compareMatchScores,
+  scoreTextFields,
+  tokenizeQuery,
+  type MatchScore,
+} from "@getpaseo/protocol/search/text-match";
+import type { DraftSearchHit } from "@getpaseo/protocol/draft/rpc-schemas";
 import type { SessionInboundMessage, SessionOutboundMessage } from "../../messages.js";
 import {
   ArtifactNotFoundError,
@@ -84,6 +91,8 @@ export class DraftSession {
         return this.handleCaptureRevision(storage, request);
       case "draft.settle_dispatch.request":
         return this.handleSettleDispatch(storage, request);
+      case "draft.search.request":
+        return this.handleSearch(storage, request);
       default:
         return undefined;
     }
@@ -311,6 +320,67 @@ export class DraftSession {
     }
   }
 
+  /**
+   * Searches current bodies and every captured revision. Running here rather
+   * than on the client is the whole point: snapshots are not replicated, so a
+   * paragraph you sent and later edited away is findable only where the files
+   * are (ADR-0005).
+   *
+   * No index. Hundreds of drafts of a few KB each scan in milliseconds, and an
+   * index would owe answers about invalidation and rebuild-after-crash that cost
+   * more than they save at this size.
+   */
+  private async handleSearch(
+    storage: DraftStorage,
+    request: Extract<DraftInbound, { type: "draft.search.request" }>,
+  ): Promise<void> {
+    try {
+      const hits: DraftSearchHit[] = [];
+      const scored: { hit: DraftSearchHit; score: MatchScore }[] = [];
+      for (const record of await storage.list({ includeArchived: true })) {
+        const detail = await storage.get(record.id);
+        if (!detail) continue;
+        const archived = detail.archivedAt !== null;
+
+        const current = scoreTextFields(request.query, [detail.title ?? "", detail.body]);
+        if (current) {
+          scored.push({
+            hit: { artifactId: detail.id, where: { kind: "artifact" }, archived },
+            score: current,
+          });
+        }
+
+        for (const snapshot of detail.snapshots) {
+          // Skip a revision whose text the current body already matched; the
+          // draft would otherwise appear twice for words it never lost.
+          if (current && snapshot.body === detail.body) continue;
+          const score = scoreTextFields(request.query, [snapshot.body]);
+          if (!score) continue;
+          scored.push({
+            hit: {
+              artifactId: detail.id,
+              where: { kind: "snapshot", rev: snapshot.rev },
+              excerpt: excerptAround(request.query, snapshot.body),
+              archived,
+            },
+            score,
+          });
+        }
+      }
+
+      scored.sort((left, right) => compareMatchScores(left.score, right.score));
+      const limit = request.limit ?? DEFAULT_SEARCH_LIMIT;
+      for (const entry of scored.slice(0, limit)) hits.push(entry.hit);
+
+      this.host.emit({
+        type: "draft.search.response",
+        payload: { requestId: request.requestId, query: request.query, hits },
+      });
+    } catch (error) {
+      this.emitRpcError(request, error);
+    }
+  }
+
   private emitRpcError(request: DraftInbound, error: unknown): void {
     const message = error instanceof Error ? error.message : String(error);
     this.logger.error({ err: error, requestType: request.type }, "Draft request failed");
@@ -324,6 +394,28 @@ export class DraftSession {
       },
     });
   }
+}
+
+const DEFAULT_SEARCH_LIMIT = 50;
+const EXCERPT_RADIUS = 90;
+
+/**
+ * A window of the snapshot around the first token that matched. The client has
+ * no copy of this text, so without it a snapshot hit could only say "somewhere
+ * in revision 7".
+ */
+function excerptAround(query: string, body: string): string {
+  const tokens = tokenizeQuery(query);
+  const haystack = body.toLowerCase();
+  let at = -1;
+  for (const token of tokens) {
+    const found = haystack.indexOf(token.toLowerCase());
+    if (found !== -1 && (at === -1 || found < at)) at = found;
+  }
+  if (at === -1) return body.slice(0, EXCERPT_RADIUS * 2);
+  const start = Math.max(0, at - EXCERPT_RADIUS);
+  const end = Math.min(body.length, at + EXCERPT_RADIUS);
+  return `${start > 0 ? "…" : ""}${body.slice(start, end)}${end < body.length ? "…" : ""}`;
 }
 
 /** The wire record, without the assembled snapshots and dispatches. */

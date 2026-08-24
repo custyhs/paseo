@@ -4,13 +4,21 @@ import { StyleSheet } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import { MenuHeader } from "@/components/headers/menu-header";
 import { SearchField } from "@/components/ui/search-field";
-import { DraftsSourceProvider, useAllDrafts } from "@/drafts/context";
-import { useHostDraftsSource } from "@/drafts/use-host-source";
+import {
+  DraftsSourceProvider,
+  useDraftSearch,
+  useDraftsAcrossHosts,
+  type HostedDraft,
+} from "@/drafts/context";
+import { useDraftHosts } from "@/drafts/use-host-source";
+import { HostFilter } from "@/components/hosts/host-filter";
+import { ALL_HOSTS_OPTION_ID } from "@/components/hosts/host-picker-constants";
+import { useHosts } from "@/runtime/host-runtime";
 import { DraftEditor } from "@/drafts/draft-editor";
 import { draftDisplayTitle, plannedTargetKey, type ArtifactDetail } from "@/drafts/model";
 import { describeWorkspace, useAllWorkspaces } from "@/drafts/workspaces";
-import { useSessionStore } from "@/stores/session-store";
 import { useIsCompactFormFactor } from "@/constants/layout";
+import { isNative } from "@/constants/platform";
 
 /**
  * The global home for drafts. Grouping is by day and location is a filter, which
@@ -24,16 +32,6 @@ function dayKey(iso: string): string {
   return iso.slice(0, 10);
 }
 
-function matchesSearch(artifact: ArtifactDetail, search: string): boolean {
-  const query = search.trim().toLowerCase();
-  if (!query) return true;
-  const haystack = `${artifact.title ?? ""}\n${artifact.body}`.toLowerCase();
-  return query
-    .split(/\s+/)
-    .filter(Boolean)
-    .every((token) => haystack.includes(token));
-}
-
 function rowStyleFor(isSelected: boolean) {
   return ({ pressed }: PressableStateCallbackType) => [
     styles.row,
@@ -42,52 +40,102 @@ function rowStyleFor(isSelected: boolean) {
   ];
 }
 
+/**
+ * Hover reveal follows `docs/hover.md` exactly: the tracker is a plain `View`
+ * with pointer events, the press lives on a separate inner `Pressable`, and the
+ * revealed control sits inside so crossing onto it never fires `pointerleave`.
+ * Pointer events do not fire on native, so the control is simply always there
+ * on native and on compact.
+ */
 const DraftListRow = memo(function DraftListRow({
   artifact,
   isSelected,
   planLabels,
+  matchedRev,
   onSelect,
+  onToggleArchived,
 }: {
   artifact: ArtifactDetail;
   isSelected: boolean;
   planLabels: string[];
+  /** Set when the query matched only an older revision, not the current text. */
+  matchedRev: number | null;
   onSelect: (artifactId: string) => void;
+  onToggleArchived: (artifactId: string) => void;
 }) {
   const { t } = useTranslation();
+  const isCompact = useIsCompactFormFactor();
+  const [isHovered, setIsHovered] = useState(false);
+  const onPointerEnter = useCallback(() => setIsHovered(true), []);
+  const onPointerLeave = useCallback(() => setIsHovered(false), []);
   const onPress = useCallback(() => onSelect(artifact.id), [onSelect, artifact.id]);
+  const onArchive = useCallback(
+    () => onToggleArchived(artifact.id),
+    [onToggleArchived, artifact.id],
+  );
   const style = useMemo(() => rowStyleFor(isSelected), [isSelected]);
   const snippet = artifact.body.trim().replace(/\s+/g, " ").slice(0, 120);
+  const isArchived = artifact.archivedAt !== null;
+  const showArchive = isHovered || isNative || isCompact;
+
   return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={style}>
-      <View style={styles.rowHead}>
-        <Text numberOfLines={1} style={styles.rowTitle}>
-          {draftDisplayTitle(artifact) ?? t("drafts.labels.untitled")}
-        </Text>
-      </View>
-      {snippet ? (
-        <Text numberOfLines={1} style={styles.rowSnippet}>
-          {snippet}
-        </Text>
-      ) : null}
-      <View style={styles.tagRow}>
-        {planLabels.length === 0 ? (
-          <Text style={styles.tag}>{t("drafts.labels.unplanned")}</Text>
-        ) : (
-          planLabels.map((label) => (
-            <Text key={label} style={styles.tag}>
-              {label}
-            </Text>
-          ))
-        )}
-        {artifact.dispatches.length > 0 ? (
-          <Text style={styles.sentTag}>
-            {t("drafts.labels.sentCount", { count: artifact.dispatches.length })}
+    <View
+      style={styles.rowHoverTracker}
+      onPointerEnter={onPointerEnter}
+      onPointerLeave={onPointerLeave}
+    >
+      <Pressable accessibilityRole="button" onPress={onPress} style={style}>
+        <View style={styles.rowHead}>
+          <Text numberOfLines={1} style={styles.rowTitle}>
+            {draftDisplayTitle(artifact) ?? t("drafts.labels.untitled")}
+          </Text>
+          {showArchive ? (
+            <Pressable
+              accessibilityRole="button"
+              testID={`draft-archive-${artifact.id}`}
+              onPress={onArchive}
+              style={archiveButtonStyle}
+            >
+              <Text style={styles.archiveLabel}>
+                {t(isArchived ? "drafts.actions.unarchive" : "drafts.actions.archive")}
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+        {snippet ? (
+          <Text numberOfLines={1} style={styles.rowSnippet}>
+            {snippet}
           </Text>
         ) : null}
-      </View>
-    </Pressable>
+        <View style={styles.tagRow}>
+          {planLabels.length === 0 ? (
+            <Text style={styles.tag}>{t("drafts.labels.unplanned")}</Text>
+          ) : (
+            planLabels.map((label) => (
+              <Text key={label} style={styles.tag}>
+                {label}
+              </Text>
+            ))
+          )}
+          {artifact.dispatches.length > 0 ? (
+            <Text style={styles.sentTag}>
+              {t("drafts.labels.sentCount", { count: artifact.dispatches.length })}
+            </Text>
+          ) : null}
+          {matchedRev !== null ? (
+            <Text style={styles.matchTag}>
+              {t("drafts.list.matchedInRevision", { rev: matchedRev })}
+            </Text>
+          ) : null}
+        </View>
+      </Pressable>
+    </View>
   );
 });
+
+function archiveButtonStyle({ pressed }: PressableStateCallbackType) {
+  return [styles.archiveButton, pressed && styles.pressed];
+}
 
 function newButtonStyle({ pressed }: PressableStateCallbackType) {
   return [styles.newButton, pressed && styles.pressed];
@@ -96,15 +144,28 @@ function newButtonStyle({ pressed }: PressableStateCallbackType) {
 export function DraftsScreen() {
   const { t } = useTranslation();
   const isCompact = useIsCompactFormFactor();
-  const sessions = useSessionStore((state) => state.sessions);
   const workspaces = useAllWorkspaces();
-  const serverId = useMemo(() => Object.keys(sessions)[0] ?? "", [sessions]);
-  // Resolved once here and supplied to everything below, so the editor and the
-  // sheets do not each re-derive which host they are talking to.
-  const source = useHostDraftsSource(serverId);
-  const { artifacts } = useAllDrafts(source);
+  const draftHosts = useDraftHosts();
+  const hostProfiles = useHosts();
+  const { drafts } = useDraftsAcrossHosts(draftHosts);
   const [search, setSearch] = useState("");
+  const searchHits = useDraftSearch(draftHosts, search);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // A draft belongs to the daemon that stores it, so the filter narrows the
+  // list rather than switching which host is connected.
+  const [hostFilter, setHostFilter] = useState<string>(ALL_HOSTS_OPTION_ID);
+
+  const visibleHosts = useMemo(
+    () =>
+      hostFilter === ALL_HOSTS_OPTION_ID
+        ? draftHosts
+        : draftHosts.filter((host) => host.serverId === hostFilter),
+    [draftHosts, hostFilter],
+  );
+  // Creating needs one host. With a filter on it is that one; with "all hosts"
+  // and several connected it is the first, which is arbitrary — the row shows
+  // which host a draft landed on so the choice is at least visible.
+  const createHost = visibleHosts[0] ?? draftHosts[0] ?? null;
 
   const labelFor = useCallback(
     (artifact: ArtifactDetail) =>
@@ -122,42 +183,114 @@ export function DraftsScreen() {
     [workspaces],
   );
 
+  /**
+   * When a query is running, the daemon decides which drafts match — it is the
+   * only side that can see revisions the draft no longer contains. A draft that
+   * matched only in an old revision is marked, so the row explains itself rather
+   * than looking like a false positive.
+   */
+  const matched = useMemo(() => {
+    if (!search.trim()) return null;
+    const byArtifact = new Map<string, number | null>();
+    for (const { serverId, hit } of searchHits) {
+      const key = `${serverId}:${hit.artifactId}`;
+      const rev = hit.where.kind === "snapshot" ? hit.where.rev : null;
+      // A current-text hit outranks an old-revision one: the words are still there.
+      if (rev === null || !byArtifact.has(key)) byArtifact.set(key, rev);
+    }
+    return byArtifact;
+  }, [search, searchHits]);
+
+  const isMatch = useCallback(
+    (entry: HostedDraft) =>
+      matched === null || matched.has(`${entry.serverId}:${entry.artifact.id}`),
+    [matched],
+  );
+  const matchedRev = useCallback(
+    (entry: HostedDraft) => matched?.get(`${entry.serverId}:${entry.artifact.id}`) ?? null,
+    [matched],
+  );
+
   const groups = useMemo(() => {
-    const visible = artifacts
-      .filter((artifact) => artifact.archivedAt === null && matchesSearch(artifact, search))
-      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
-    const byDay = new Map<string, ArtifactDetail[]>();
-    for (const artifact of visible) {
-      const key = dayKey(artifact.updatedAt);
+    const allowed = new Set(visibleHosts.map((host) => host.serverId));
+    const visible = drafts
+      .filter(
+        (entry) =>
+          allowed.has(entry.serverId) && entry.artifact.archivedAt === null && isMatch(entry),
+      )
+      .sort((left, right) => right.artifact.updatedAt.localeCompare(left.artifact.updatedAt));
+    const byDay = new Map<string, HostedDraft[]>();
+    for (const entry of visible) {
+      const key = dayKey(entry.artifact.updatedAt);
       const bucket = byDay.get(key);
-      if (bucket) bucket.push(artifact);
-      else byDay.set(key, [artifact]);
+      if (bucket) bucket.push(entry);
+      else byDay.set(key, [entry]);
     }
     return [...byDay.entries()];
-  }, [artifacts, search]);
+  }, [drafts, isMatch, visibleHosts]);
+
+  /**
+   * Archived drafts stay out of the everyday list but are reachable by search,
+   * grouped on their own at the bottom (ADR-0005 decision 4). Excluding them
+   * entirely teaches the user the draft is gone rather than filed.
+   */
+  const archivedMatches = useMemo(() => {
+    if (!search.trim()) return [];
+    const allowed = new Set(visibleHosts.map((host) => host.serverId));
+    return drafts
+      .filter(
+        (entry) =>
+          allowed.has(entry.serverId) && entry.artifact.archivedAt !== null && isMatch(entry),
+      )
+      .sort((left, right) => right.artifact.updatedAt.localeCompare(left.artifact.updatedAt));
+  }, [drafts, isMatch, search, visibleHosts]);
 
   const selected = useMemo(
-    () => artifacts.find((entry) => entry.id === selectedId) ?? null,
-    [artifacts, selectedId],
+    () => drafts.find((entry) => entry.artifact.id === selectedId) ?? null,
+    [drafts, selectedId],
   );
 
   const onCreate = useCallback(() => {
     // Created here, so planned nowhere: a draft started in the global home is
     // not standing in any workspace, and pretending otherwise would put it in a
     // scratchpad the user never opened.
+    if (!createHost) return;
     const create = async () => {
-      const created = await source.create();
+      const created = await createHost.source.create();
       setSelectedId(created.id);
     };
     void create();
-  }, [source]);
+  }, [createHost]);
+
+  const onToggleArchived = useCallback(
+    (artifactId: string) => {
+      const owner = drafts.find((entry) => entry.artifact.id === artifactId);
+      if (!owner) return;
+      void owner.source.setArchived({
+        artifactId,
+        archived: owner.artifact.archivedAt === null,
+      });
+    },
+    [drafts],
+  );
 
   const list = (
     <View style={styles.listPane}>
+      {hostProfiles.length > 1 ? (
+        <View style={styles.hostRow}>
+          <HostFilter
+            hosts={hostProfiles}
+            selectedHost={hostFilter}
+            onSelectHost={setHostFilter}
+            triggerTestID="drafts-host-filter"
+          />
+        </View>
+      ) : null}
       <View style={styles.filterRow}>
         <SearchField
           value={search}
           onChangeText={setSearch}
+          testID="drafts-search"
           placeholder={t("drafts.list.searchPlaceholder")}
           clearAccessibilityLabel={t("drafts.list.clearSearch")}
         />
@@ -170,7 +303,7 @@ export function DraftsScreen() {
           <Text style={styles.newButtonLabel}>{t("drafts.actions.newDraft")}</Text>
         </Pressable>
       </View>
-      <ScrollView>
+      <ScrollView testID="drafts-list">
         {groups.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyHint}>
@@ -181,18 +314,36 @@ export function DraftsScreen() {
           groups.map(([day, entries]) => (
             <View key={day}>
               <Text style={styles.daySeparator}>{day}</Text>
-              {entries.map((artifact) => (
+              {entries.map((entry) => (
                 <DraftListRow
-                  key={artifact.id}
-                  artifact={artifact}
-                  isSelected={artifact.id === selectedId}
-                  planLabels={labelFor(artifact)}
+                  key={`${entry.serverId}:${entry.artifact.id}`}
+                  artifact={entry.artifact}
+                  isSelected={entry.artifact.id === selectedId}
+                  planLabels={labelFor(entry.artifact)}
+                  matchedRev={matchedRev(entry)}
                   onSelect={setSelectedId}
+                  onToggleArchived={onToggleArchived}
                 />
               ))}
             </View>
           ))
         )}
+        {archivedMatches.length > 0 ? (
+          <View testID="drafts-archived-group">
+            <Text style={styles.daySeparator}>{t("drafts.list.archivedGroup")}</Text>
+            {archivedMatches.map((entry) => (
+              <DraftListRow
+                key={`${entry.serverId}:${entry.artifact.id}`}
+                artifact={entry.artifact}
+                isSelected={entry.artifact.id === selectedId}
+                planLabels={labelFor(entry.artifact)}
+                matchedRev={matchedRev(entry)}
+                onSelect={setSelectedId}
+                onToggleArchived={onToggleArchived}
+              />
+            ))}
+          </View>
+        ) : null}
       </ScrollView>
     </View>
   );
@@ -204,7 +355,13 @@ export function DraftsScreen() {
   const editorPane = (
     <View style={styles.editorPane}>
       {selected ? (
-        <DraftEditor key={selected.id} artifact={selected} serverId={serverId} />
+        <DraftsSourceProvider source={selected.source}>
+          <DraftEditor
+            key={`${selected.serverId}:${selected.artifact.id}`}
+            artifact={selected.artifact}
+            serverId={selected.serverId}
+          />
+        </DraftsSourceProvider>
       ) : (
         <View style={styles.emptyState}>
           <Text style={styles.emptyHint}>{t("drafts.empty.pickDraft")}</Text>
@@ -213,16 +370,17 @@ export function DraftsScreen() {
     </View>
   );
 
+  // The editor and its sheets take the selected draft's own host, supplied
+  // around the editor rather than around the screen: with several hosts there is
+  // no single source the whole screen could use.
   return (
-    <DraftsSourceProvider source={source}>
-      <View testID="drafts-screen" style={styles.container}>
-        <MenuHeader title={t("drafts.list.title")} />
-        <View style={isCompact ? styles.bodyCompact : styles.body}>
-          {showList ? list : null}
-          {showEditor ? editorPane : null}
-        </View>
+    <View testID="drafts-screen" style={styles.container}>
+      <MenuHeader title={t("drafts.list.title")} />
+      <View style={isCompact ? styles.bodyCompact : styles.body}>
+        {showList ? list : null}
+        {showEditor ? editorPane : null}
       </View>
-    </DraftsSourceProvider>
+    </View>
   );
 }
 
@@ -230,6 +388,22 @@ const styles = StyleSheet.create((theme) => ({
   container: { flex: 1, backgroundColor: theme.colors.surface0 },
   body: { flex: 1, flexDirection: "row" },
   bodyCompact: { flex: 1 },
+  // Fixed height so the archive control swapping in never moves the row —
+  // failure mode 2 in `docs/hover.md`.
+  rowHoverTracker: { position: "relative", minHeight: 64 },
+  archiveButton: {
+    paddingHorizontal: theme.spacing[1.5],
+    paddingVertical: theme.spacing[0.5],
+    borderRadius: theme.borderRadius.base,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  archiveLabel: { fontSize: theme.fontSize.sm, color: theme.colors.foregroundMuted },
+  matchTag: { fontSize: theme.fontSize.sm, color: theme.colors.accentBright },
+  hostRow: {
+    paddingHorizontal: theme.spacing[3],
+    paddingTop: theme.spacing[2],
+  },
   listPane: {
     width: 320,
     borderRightWidth: 1,
