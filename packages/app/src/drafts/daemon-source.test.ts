@@ -333,6 +333,30 @@ describe("looking at what was sent", () => {
   });
 });
 
+describe("a host that cannot send", () => {
+  test("the failure reaches the caller instead of looking like success", async () => {
+    const { client } = harness();
+    const source = new DaemonDraftsSource({
+      client: client as unknown as DaemonClient,
+      createAgent: () => Promise.resolve({ agentId: "agent-1" }),
+      // What the daemon does when a message is not accepted.
+      sendToAgent: () => Promise.reject(new Error("sendAgentMessage rejected")),
+    });
+
+    // The editor used to call this as `void send()`, so a rejection here showed
+    // the user nothing at all — the send simply appeared not to happen.
+    await expect(
+      source.send({
+        artifactId: "drf_1",
+        target: { kind: "existing_agent", agentId: "agent-9", workspaceId: "ws-1" },
+      }),
+    ).rejects.toThrow("sendAgentMessage rejected");
+    expect(client.settleDraftDispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "failed" }),
+    );
+  });
+});
+
 describe("pushes", () => {
   test("subscribing listens once, however many listeners there are", () => {
     const { source, client } = harness();

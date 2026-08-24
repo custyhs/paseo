@@ -197,6 +197,7 @@ export function DraftEditor({
   const [isPlanOpen, setIsPlanOpen] = useState(false);
   const [openRev, setOpenRev] = useState<number | null>(null);
   const [justSent, setJustSent] = useState<SendTarget | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
 
   // The loop owns everything about writing: the debounce, the coalescing, the
   // local checkpoint and what each failure means. It is a plain object so the
@@ -279,10 +280,18 @@ export function DraftEditor({
   const onSend = useCallback(
     (target: SendTarget) => {
       setIsSendOpen(false);
+      setSendError(null);
       const send = async () => {
-        const result = await source.send({ artifactId: artifact.id, target });
-        loop.noteVersion(result.artifact.version);
-        setJustSent(target);
+        try {
+          const result = await source.send({ artifactId: artifact.id, target });
+          loop.noteVersion(result.artifact.version);
+          setJustSent(target);
+        } catch (error) {
+          // A send that failed has to say so. The snapshot and a `failed`
+          // dispatch are already on disk, so the lineage is right either way —
+          // what was missing was the user finding out.
+          setSendError(error instanceof Error ? error.message : String(error));
+        }
       };
       void send();
     },
@@ -290,6 +299,7 @@ export function DraftEditor({
   );
 
   const dismissSent = useCallback(() => setJustSent(null), []);
+  const dismissSendError = useCallback(() => setSendError(null), []);
   const openSentAgent = useCallback(() => {
     if (justSent?.kind !== "existing_agent") return;
     navigateToAgent({ serverId, agentId: justSent.agentId });
@@ -379,6 +389,15 @@ export function DraftEditor({
         style={styles.input}
       />
 
+      {sendError !== null ? (
+        <View testID="draft-send-error" style={styles.sendErrorBar}>
+          <Text style={styles.sendErrorText}>{t("drafts.sent.failed", { error: sendError })}</Text>
+          <Pressable accessibilityRole="button" onPress={dismissSendError} style={chipStyle}>
+            <Text style={styles.chipLabel}>{t("drafts.sent.dismiss")}</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
       {justSent ? (
         <SentConfirmation
           target={justSent}
@@ -448,6 +467,17 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: theme.colors.surface1,
   },
   conflictText: { flex: 1, fontSize: theme.fontSize.sm, color: theme.colors.foreground },
+  sendErrorBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+    paddingHorizontal: theme.spacing[3],
+    paddingVertical: theme.spacing[1.5],
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+    backgroundColor: theme.colors.surface1,
+  },
+  sendErrorText: { flex: 1, fontSize: theme.fontSize.sm, color: theme.colors.statusDanger },
   planRow: {
     flexDirection: "row",
     alignItems: "center",

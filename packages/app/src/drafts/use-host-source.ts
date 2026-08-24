@@ -8,14 +8,22 @@ import { DaemonDraftsSource } from "./daemon-source";
 import type { DraftsSource } from "./source";
 
 /**
- * The daemon-backed source when the host has the `draft.*` domain, and the mock
- * when it does not.
+ * What a surface can do with drafts on one host.
  *
- * Gated once on `server_info.features.drafts`, with no fallback path: an older
- * daemon has nowhere to put a draft, so there is nothing to degrade to. The mock
- * is for development, not for talking to a host that cannot store anything.
+ * `unsupported` exists because falling back to the mock against a real host is
+ * a lie, and a specific one: the mock's `send` records a dispatch and delivers
+ * nothing, so a draft sent to a live session shows a confirmation and reaches
+ * no agent. `docs/protocol-compatibility.md` asks for exactly this shape — gate
+ * once on the capability, then run the feature or say the host needs updating.
  */
-export function useHostDraftsSource(serverId: string | null): DraftsSource {
+export type DraftsAvailability =
+  | { status: "ready"; source: DraftsSource }
+  /** Connected, but the daemon predates `draft.*`. Nothing to degrade to. */
+  | { status: "unsupported" }
+  /** No host at all. The mock keeps the surfaces developable. */
+  | { status: "mock"; source: DraftsSource };
+
+export function useHostDraftsAvailability(serverId: string | null): DraftsAvailability {
   const client = useHostRuntimeClient(serverId ?? "");
   const supportsDrafts = useSessionStore(
     (state) => state.sessions[serverId ?? ""]?.serverInfo?.features?.drafts === true,
@@ -23,10 +31,9 @@ export function useHostDraftsSource(serverId: string | null): DraftsSource {
   const workspaces = useSessionStore((state) => state.sessions[serverId ?? ""]?.workspaces);
 
   return useMemo(() => {
-    // Until a host has the domain, the screens keep running on the mock rather
-    // than showing nothing — the two surfaces are still worth developing against.
-    if (!serverId || !client || !supportsDrafts) return getSharedMockDraftsSource();
-    return sourceFor({ serverId, client, workspaces });
+    if (!serverId || !client) return { status: "mock", source: getSharedMockDraftsSource() };
+    if (!supportsDrafts) return { status: "unsupported" };
+    return { status: "ready", source: sourceFor({ serverId, client, workspaces }) };
   }, [client, serverId, supportsDrafts, workspaces]);
 }
 

@@ -74,6 +74,7 @@ const en = {
   sent: {
     toAgent: "Sent to {{title}} — open it",
     toNewAgent: "Sent. A new session is starting.",
+    failed: "Could not send: {{error}}",
     dismiss: "Dismiss",
   },
   snapshot: {
@@ -96,6 +97,8 @@ const en = {
     plannedTitle: "Nothing planned here yet",
     plannedHint: "A draft you start here is planned for this workspace.",
     pickDraft: "Pick a draft to edit",
+    unsupportedTitle: "This host does not support drafts",
+    unsupportedHint: "Update the daemon on this host to write drafts here.",
   },
 };
 
@@ -165,6 +168,7 @@ const zhCN: typeof en = {
   sent: {
     toAgent: "已发送给 {{title}} —— 点击打开",
     toNewAgent: "已发送。新会话正在启动。",
+    failed: "发送失败:{{error}}",
     dismiss: "关闭",
   },
   snapshot: {
@@ -187,6 +191,8 @@ const zhCN: typeof en = {
     plannedTitle: "这里还没有计划中的草稿",
     plannedHint: "在这里新建的草稿会自动预定到本 workspace。",
     pickDraft: "选一份草稿来编辑",
+    unsupportedTitle: "这个 host 不支持草稿",
+    unsupportedHint: "升级这个 host 上的 daemon 之后才能在这里写草稿。",
   },
 };
 

@@ -262,10 +262,14 @@ export function useDraftSearch(hosts: DraftHost[], query: string): HostedSearchH
   return hits;
 }
 
-export function useAllDrafts(source: DraftsSource): DraftsQueryState {
+export function useAllDrafts(source: DraftsSource | null): DraftsQueryState {
   const [state, setState] = useState<DraftsQueryState>({ artifacts: [], isLoading: true });
 
   useEffect(() => {
+    if (!source) {
+      setState({ artifacts: [], isLoading: false });
+      return;
+    }
     let cancelled = false;
     const read = async () => {
       const summaries = await source.list();

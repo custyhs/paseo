@@ -7,7 +7,7 @@ import invariant from "tiny-invariant";
 import { usePaneContext } from "@/panels/pane-context";
 import type { PanelRegistration } from "@/panels/panel-registry";
 import { DraftsSourceProvider, useAllDrafts } from "@/drafts/context";
-import { useHostDraftsSource } from "@/drafts/use-host-source";
+import { useHostDraftsAvailability } from "@/drafts/use-host-source";
 import { useWorkspaceProjectLookup } from "@/drafts/workspaces";
 import { DraftEditor } from "@/drafts/draft-editor";
 import {
@@ -125,7 +125,10 @@ function ScratchpadPanel() {
   const { serverId, workspaceId, target } = usePaneContext();
   invariant(target.kind === "scratchpad", "ScratchpadPanel requires a scratchpad target");
 
-  const source = useHostDraftsSource(serverId);
+  const availability = useHostDraftsAvailability(serverId);
+  // Reads are harmless against the mock; sending is not. The unsupported branch
+  // returns before any of this is rendered.
+  const source = availability.status === "unsupported" ? null : availability.source;
   const { artifacts } = useAllDrafts(source);
   const lookup = useWorkspaceProjectLookup();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -144,6 +147,7 @@ function ScratchpadPanel() {
   // where the user is standing. A draft started in the global destination is not
   // standing anywhere and stays unplanned.
   const onCreate = useCallback(() => {
+    if (!source) return;
     const create = async () => {
       const created = await source.create({ planned: [{ kind: "workspace", workspaceId }] });
       setSelectedId(created.id);
@@ -152,6 +156,19 @@ function ScratchpadPanel() {
   }, [source, workspaceId]);
 
   const onToggleHistory = useCallback(() => setIsHistoryOpen((open) => !open), []);
+
+  // A daemon without the domain gets told so. Running the mock here would let
+  // you write drafts that vanish and "send" ones that reach nobody.
+  if (availability.status === "unsupported" || !source) {
+    return (
+      <View testID="scratchpad-panel" style={styles.container}>
+        <View style={styles.emptyState}>
+          <Text style={styles.sectionTitle}>{t("drafts.empty.unsupportedTitle")}</Text>
+          <Text style={styles.emptyHint}>{t("drafts.empty.unsupportedHint")}</Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <DraftsSourceProvider source={source}>
