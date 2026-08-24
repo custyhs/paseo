@@ -101,8 +101,12 @@ test.describe("Scratchpad side panel", () => {
 
     // `openTab` refuses a target the normalizer does not recognise, and a refusal
     // looks exactly like a click that did nothing.
+    //
+    // The menu item's id comes from the launch catalog, so `-scratchpad` is
+    // generated rather than hand-placed. The trigger is not: upstream renamed it
+    // from `workspace-new-tab-menu-trigger` in #3715.
     const panel = await ensureSidePanel(page);
-    await panel.getByTestId("workspace-new-tab-menu-trigger").click();
+    await panel.getByTestId("workspace-new-tab-button").click();
     await shown(page, "workspace-new-tab-menu-scratchpad").click();
 
     await expect(shown(page, "scratchpad-panel")).toBeVisible({ timeout: 30_000 });
@@ -113,7 +117,7 @@ test.describe("Scratchpad side panel", () => {
     await workspace.navigateTo();
 
     const panel = await ensureSidePanel(page);
-    await panel.getByTestId("workspace-new-tab-menu-trigger").click();
+    await panel.getByTestId("workspace-new-tab-button").click();
     await shown(page, "workspace-new-tab-menu-scratchpad").click();
     await expect(shown(page, "scratchpad-panel")).toBeVisible({ timeout: 30_000 });
 

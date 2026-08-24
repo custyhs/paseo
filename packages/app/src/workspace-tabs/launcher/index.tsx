@@ -8,7 +8,7 @@ import {
 } from "react";
 import { useRouter, type Href } from "expo-router";
 import { useTranslation } from "react-i18next";
-import { Globe, SquarePen, SquareTerminal } from "lucide-react-native";
+import { Globe, NotebookPen, SquarePen, SquareTerminal } from "lucide-react-native";
 import invariant from "tiny-invariant";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { resolvePluginIcon } from "@/plugins/icons";
@@ -85,6 +85,7 @@ const BUILT_IN_SELECTIONS = {
   files: { kind: "target", target: { kind: "files" } },
   browser: { kind: "browser" },
   pullRequest: { kind: "target", target: { kind: "pull_request" } },
+  scratchpad: { kind: "target", target: { kind: "scratchpad" } },
 } satisfies Record<BuiltInLaunchItemId, NewTabSelection>;
 
 function getLaunchPresentation(kind: WorkspaceTabTarget["kind"]): PanelPresentation {
@@ -194,6 +195,15 @@ export function useWorkspaceTabLaunchCatalog(input: {
         toggleTarget: null,
         hidden: !launcher.showPullRequest,
         launch: launchSelection(BUILT_IN_SELECTIONS.pullRequest),
+      },
+      scratchpad: {
+        id: "scratchpad",
+        label: t("drafts.panel.label"),
+        Icon: NotebookPen,
+        // No `shortcutActionId`: drafts have no registered shortcut yet (D18),
+        // and naming one here would render a hint for a key that does nothing.
+        disabled: false,
+        launch: launchSelection(BUILT_IN_SELECTIONS.scratchpad),
       },
     };
     const tabItems = getBuiltInLaunchOrder(purpose).flatMap((id) => {
