@@ -91,6 +91,8 @@ const en = {
     empty: "No drafts yet.",
     noMatches: "No drafts match that search.",
     archivedGroup: "Archived",
+    showArchived: "Show archived ({{count}})",
+    hideArchived: "Hide archived",
     matchedInRevision: "Found in rev {{rev}}",
   },
   empty: {
@@ -185,6 +187,8 @@ const zhCN: typeof en = {
     empty: "还没有草稿。",
     noMatches: "没有匹配的草稿。",
     archivedGroup: "已归档",
+    showArchived: "显示已归档({{count}})",
+    hideArchived: "隐藏已归档",
     matchedInRevision: "命中于 rev {{rev}}",
   },
   empty: {

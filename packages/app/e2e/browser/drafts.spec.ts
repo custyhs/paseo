@@ -109,8 +109,10 @@ test.describe("Drafts destination", () => {
       { timeout: 15_000 },
     );
 
-    // ...but findable by search, in its own group, and reversible from there.
-    await shown(page, "drafts-search").fill(words);
+    // ...and reachable again without remembering what it said. Search finds it
+    // too, but the words are exactly what archiving takes away from you, so the
+    // toggle is the path that has to work.
+    await shown(page, "drafts-show-archived").click();
     const archivedGroup = shown(page, "drafts-archived-group");
     await expect(archivedGroup).toBeVisible({ timeout: 15_000 });
     // The control is hover-revealed, so it has to be hovered again here — the
@@ -121,10 +123,14 @@ test.describe("Drafts destination", () => {
       .filter({ visible: true })
       .first()
       .click();
+    // Unarchived, so the group empties and the draft is back in the list.
     await expect(page.getByTestId("drafts-archived-group").filter({ visible: true })).toHaveCount(
       0,
       { timeout: 15_000 },
     );
+    await expect(
+      shown(page, "drafts-list").getByText(words).filter({ visible: true }).first(),
+    ).toBeVisible({ timeout: 15_000 });
   });
 
   test("lists somewhere to plan a draft for", async ({ page, withWorkspace }) => {

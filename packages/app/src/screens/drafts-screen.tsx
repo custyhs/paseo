@@ -137,6 +137,16 @@ function archiveButtonStyle({ pressed }: PressableStateCallbackType) {
   return [styles.archiveButton, pressed && styles.pressed];
 }
 
+function chipStyle({ pressed }: PressableStateCallbackType) {
+  return [styles.archiveButton, pressed && styles.pressed];
+}
+
+const ARCHIVED_TOGGLE_ON = { selected: true } as const;
+const ARCHIVED_TOGGLE_OFF = { selected: false } as const;
+function archivedToggleState(shown: boolean) {
+  return shown ? ARCHIVED_TOGGLE_ON : ARCHIVED_TOGGLE_OFF;
+}
+
 function newButtonStyle({ pressed }: PressableStateCallbackType) {
   return [styles.newButton, pressed && styles.pressed];
 }
@@ -154,6 +164,9 @@ export function DraftsScreen() {
   // A draft belongs to the daemon that stores it, so the filter narrows the
   // list rather than switching which host is connected.
   const [hostFilter, setHostFilter] = useState<string>(ALL_HOSTS_OPTION_ID);
+  // Archiving has to be reversible without remembering what the draft said.
+  // Search alone was not an answer: the words are exactly what you have lost.
+  const [showArchived, setShowArchived] = useState(false);
 
   const visibleHosts = useMemo(
     () =>
@@ -235,7 +248,7 @@ export function DraftsScreen() {
    * entirely teaches the user the draft is gone rather than filed.
    */
   const archivedMatches = useMemo(() => {
-    if (!search.trim()) return [];
+    if (!search.trim() && !showArchived) return [];
     const allowed = new Set(visibleHosts.map((host) => host.serverId));
     return drafts
       .filter(
@@ -243,7 +256,7 @@ export function DraftsScreen() {
           allowed.has(entry.serverId) && entry.artifact.archivedAt !== null && isMatch(entry),
       )
       .sort((left, right) => right.artifact.updatedAt.localeCompare(left.artifact.updatedAt));
-  }, [drafts, isMatch, search, visibleHosts]);
+  }, [drafts, isMatch, search, showArchived, visibleHosts]);
 
   const selected = useMemo(
     () => drafts.find((entry) => entry.artifact.id === selectedId) ?? null,
@@ -261,6 +274,15 @@ export function DraftsScreen() {
     };
     void create();
   }, [createHost]);
+
+  const onToggleShowArchived = useCallback(() => setShowArchived((shown) => !shown), []);
+
+  const archivedCount = useMemo(() => {
+    const allowed = new Set(visibleHosts.map((host) => host.serverId));
+    return drafts.filter(
+      (entry) => allowed.has(entry.serverId) && entry.artifact.archivedAt !== null,
+    ).length;
+  }, [drafts, visibleHosts]);
 
   const onToggleArchived = useCallback(
     (artifactId: string) => {
@@ -303,6 +325,23 @@ export function DraftsScreen() {
           <Text style={styles.newButtonLabel}>{t("drafts.actions.newDraft")}</Text>
         </Pressable>
       </View>
+      {archivedCount > 0 ? (
+        <View style={styles.archivedToggleRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={archivedToggleState(showArchived)}
+            testID="drafts-show-archived"
+            onPress={onToggleShowArchived}
+            style={chipStyle}
+          >
+            <Text style={styles.chipLabel}>
+              {t(showArchived ? "drafts.list.hideArchived" : "drafts.list.showArchived", {
+                count: archivedCount,
+              })}
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
       <ScrollView testID="drafts-list">
         {groups.length === 0 ? (
           <View style={styles.emptyState}>
@@ -400,6 +439,12 @@ const styles = StyleSheet.create((theme) => ({
   },
   archiveLabel: { fontSize: theme.fontSize.sm, color: theme.colors.foregroundMuted },
   matchTag: { fontSize: theme.fontSize.sm, color: theme.colors.accentBright },
+  chipLabel: { fontSize: theme.fontSize.sm, color: theme.colors.foregroundMuted },
+  archivedToggleRow: {
+    flexDirection: "row",
+    paddingHorizontal: theme.spacing[3],
+    paddingBottom: theme.spacing[2],
+  },
   hostRow: {
     paddingHorizontal: theme.spacing[3],
     paddingTop: theme.spacing[2],
