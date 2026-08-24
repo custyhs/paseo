@@ -372,6 +372,7 @@ export function DraftEditor({
 
       <ThemedTextInput
         multiline
+        testID="draft-body"
         initialValue={artifact.body}
         onChangeText={onChangeText}
         placeholder={t("drafts.editor.bodyPlaceholder")}

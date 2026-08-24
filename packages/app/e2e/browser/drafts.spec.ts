@@ -47,6 +47,37 @@ test.describe("Drafts destination", () => {
     await expect(shown(page, "draft-editor")).toBeVisible({ timeout: 15_000 });
   });
 
+  /**
+   * The one test that can tell the daemon apart from the mock. The mock lives in
+   * the page, so a reload wipes it; the daemon writes to disk, so a reload finds
+   * the words again. That is also the product's whole first promise, which makes
+   * it worth a real browser rather than a unit test of the seam.
+   */
+  test("a draft written here survives a reload", async ({ page }) => {
+    await gotoAppShell(page);
+    await shown(page, "sidebar-drafts").click();
+    await expect(shown(page, "drafts-screen")).toBeVisible({ timeout: 30_000 });
+
+    await shown(page, "drafts-new-draft").click();
+    await expect(shown(page, "draft-editor")).toBeVisible({ timeout: 15_000 });
+
+    const words = `survives a reload ${Date.now()}`;
+    await shown(page, "draft-body").fill(words);
+    // Writes are debounced on a pause, and the daemon has to acknowledge before
+    // the header stops saying otherwise.
+    await expect(shown(page, "draft-editor")).toContainText("Saved", { timeout: 15_000 });
+
+    await page.reload();
+    await shown(page, "sidebar-drafts").click();
+    await expect(shown(page, "drafts-screen")).toBeVisible({ timeout: 30_000 });
+
+    // Offscreen copies again: `.first()` alone finds an invisible one and then
+    // waits forever for it to be visible.
+    await expect(page.getByText(words).filter({ visible: true }).first()).toBeVisible({
+      timeout: 30_000,
+    });
+  });
+
   test("lists somewhere to plan a draft for", async ({ page, withWorkspace }) => {
     // The picker reads workspaces out of the session store, where they live in a
     // Map. `Object.values()` on a Map yields nothing and type-checks anyway, so
