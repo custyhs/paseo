@@ -1,6 +1,7 @@
 import {
   samePlannedTarget,
   type ArtifactDetail,
+  type ArtifactSnapshot,
   type ArtifactSummary,
   type PlannedTarget,
 } from "./model";
@@ -79,6 +80,13 @@ export class MockDraftsSource implements DraftsSource {
   async get(artifactId: string): Promise<ArtifactDetail | null> {
     const artifact = this.artifacts.get(artifactId);
     return artifact ? structuredClone(artifact) : null;
+  }
+
+  getSnapshot(input: { artifactId: string; rev: number }): Promise<ArtifactSnapshot | null> {
+    const found = this.artifacts
+      .get(input.artifactId)
+      ?.snapshots.find((entry) => entry.rev === input.rev);
+    return Promise.resolve(found ? structuredClone(found) : null);
   }
 
   async create(input: { planned?: PlannedTarget[] } = {}): Promise<ArtifactDetail> {

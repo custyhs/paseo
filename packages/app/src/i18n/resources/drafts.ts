@@ -77,6 +77,8 @@ const en = {
   snapshot: {
     title: "Sent revision — rev {{rev}}",
     subtitle: "clientMessageId {{clientMessageId}}",
+    loading: "Loading…",
+    missing: "This revision is no longer on the host.",
     immutable: "Immutable. This is exactly what the agent received.",
   },
   list: {
@@ -162,6 +164,8 @@ const zhCN: typeof en = {
   snapshot: {
     title: "已发送的修订版 —— rev {{rev}}",
     subtitle: "clientMessageId {{clientMessageId}}",
+    loading: "载入中…",
+    missing: "这个修订版在该 host 上已不存在。",
     immutable: "不可变。这就是 agent 当时收到的确切内容。",
   },
   list: {

@@ -69,6 +69,14 @@ function harness(over: Partial<Record<string, unknown>> = {}) {
       calls.push(`settle:${input.status}`);
       return Promise.resolve(dispatch({ status: input.status as DispatchRecord["status"] }));
     }),
+    getDraftSnapshot: vi.fn((input: { rev: number }) => {
+      calls.push(`snapshot:${input.rev}`);
+      return Promise.resolve({
+        rev: input.rev,
+        createdAt: "2026-08-24T00:00:00.000Z",
+        body: "what was actually sent",
+      });
+    }),
     on: vi.fn(() => () => undefined),
     ...over,
   };
@@ -255,6 +263,73 @@ describe("sending", () => {
       }),
     ).rejects.toThrow("provider refused");
     void calls;
+  });
+});
+
+describe("looking at what was sent", () => {
+  test("the draft does not carry its history around", async () => {
+    const { source } = harness();
+    const detail = await source.get("drf_1");
+
+    // A spec sent twenty times is twenty copies of its body, and none of them is
+    // wanted until someone opens that row. The sheet fetches instead.
+    expect(detail?.snapshots).toEqual([]);
+    expect(detail?.body).toBe("the next instruction");
+  });
+
+  test("a revision is fetched on its own, and is not the draft's current text", async () => {
+    const { source } = harness();
+    const snapshot = await source.getSnapshot({ artifactId: "drf_1", rev: 1 });
+
+    // INV-A: showing the live text here would make the whole feature a lie.
+    expect(snapshot?.body).toBe("what was actually sent");
+    expect(snapshot?.body).not.toBe("the next instruction");
+  });
+
+  test("fetching the same revision twice only asks once", async () => {
+    const { source, client, calls } = harness();
+    await source.getSnapshot({ artifactId: "drf_1", rev: 1 });
+    await source.getSnapshot({ artifactId: "drf_1", rev: 1 });
+
+    // Snapshots are immutable, so the first answer is the last one needed.
+    expect(client.getDraftSnapshot).toHaveBeenCalledOnce();
+    expect(calls.filter((entry) => entry.startsWith("snapshot:"))).toEqual(["snapshot:1"]);
+  });
+
+  test("different revisions are fetched separately", async () => {
+    const { source, client } = harness();
+    await source.getSnapshot({ artifactId: "drf_1", rev: 1 });
+    await source.getSnapshot({ artifactId: "drf_1", rev: 2 });
+
+    expect(client.getDraftSnapshot).toHaveBeenCalledTimes(2);
+  });
+
+  test("a revision the host no longer has is null, not a throw", async () => {
+    const { client } = harness({ getDraftSnapshot: vi.fn(() => Promise.resolve(null)) });
+    const source = new DaemonDraftsSource({
+      client: client as unknown as DaemonClient,
+      createAgent: () => Promise.resolve({ agentId: "agent-1" }),
+      sendToAgent: () => Promise.resolve(),
+    });
+
+    expect(await source.getSnapshot({ artifactId: "drf_1", rev: 9 })).toBeNull();
+  });
+
+  test("a missing revision is not cached as an answer", async () => {
+    const getDraftSnapshot = vi
+      .fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue({ rev: 1, createdAt: "2026-08-24T00:00:00.000Z", body: "arrived late" });
+    const { client } = harness({ getDraftSnapshot });
+    const source = new DaemonDraftsSource({
+      client: client as unknown as DaemonClient,
+      createAgent: () => Promise.resolve({ agentId: "agent-1" }),
+      sendToAgent: () => Promise.resolve(),
+    });
+
+    expect(await source.getSnapshot({ artifactId: "drf_1", rev: 1 })).toBeNull();
+    // Caching a null would make a transient miss permanent for the session.
+    expect((await source.getSnapshot({ artifactId: "drf_1", rev: 1 }))?.body).toBe("arrived late");
   });
 });
 

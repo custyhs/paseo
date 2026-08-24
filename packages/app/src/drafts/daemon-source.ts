@@ -4,7 +4,13 @@ import type {
   DispatchRecord,
   PlannedTarget as WirePlannedTarget,
 } from "@getpaseo/protocol/draft/types";
-import type { ArtifactDetail, ArtifactDispatch, ArtifactSummary, PlannedTarget } from "./model";
+import type {
+  ArtifactDetail,
+  ArtifactDispatch,
+  ArtifactSnapshot,
+  ArtifactSummary,
+  PlannedTarget,
+} from "./model";
 import {
   DraftVersionConflictError,
   type DraftListQuery,
@@ -104,6 +110,8 @@ export class DaemonDraftsSource implements DraftsSource {
   private readonly listeners = new Set<() => void>();
   /** Drafts that exist only here, because nobody has written in them yet. */
   private readonly unsaved = new Map<string, ArtifactDetail>();
+  /** Snapshots never change, so one fetch per revision is the last one needed. */
+  private readonly snapshots = new Map<string, ArtifactSnapshot>();
   private unsubscribe: (() => void) | null = null;
 
   constructor(options: DaemonDraftsSourceOptions) {
@@ -126,6 +134,21 @@ export class DaemonDraftsSource implements DraftsSource {
     const { artifact, dispatches } = await this.client.getDraftArtifact(artifactId);
     if (!artifact) return null;
     return { ...toSummary(artifact), snapshots: [], dispatches: foldDispatches(dispatches) };
+  }
+
+  async getSnapshot(input: { artifactId: string; rev: number }): Promise<ArtifactSnapshot | null> {
+    const key = `${input.artifactId}@${input.rev}`;
+    const cached = this.snapshots.get(key);
+    if (cached) return cached;
+    const snapshot = await this.client.getDraftSnapshot(input);
+    if (!snapshot) return null;
+    const entry: ArtifactSnapshot = {
+      rev: snapshot.rev,
+      createdAt: snapshot.createdAt,
+      body: snapshot.body,
+    };
+    this.snapshots.set(key, entry);
+    return entry;
   }
 
   /** Sends nothing. The draft becomes real on its first non-empty save. */

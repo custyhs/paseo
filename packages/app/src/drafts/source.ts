@@ -1,4 +1,4 @@
-import type { ArtifactDetail, ArtifactSummary, PlannedTarget } from "./model";
+import type { ArtifactDetail, ArtifactSnapshot, ArtifactSummary, PlannedTarget } from "./model";
 
 /**
  * The one seam between the drafts UI and whatever is storing drafts. The UI is
@@ -52,6 +52,13 @@ export class DraftVersionConflictError extends Error {
 export interface DraftsSource {
   list(query?: DraftListQuery): Promise<ArtifactSummary[]>;
   get(artifactId: string): Promise<ArtifactDetail | null>;
+  /**
+   * One historical revision. Pulled on its own rather than riding along with the
+   * draft: a spec sent twenty times is twenty copies of its body, and they are
+   * only ever read when someone opens that row of the lineage. Immutable, so
+   * whatever comes back can be held onto forever.
+   */
+  getSnapshot(input: { artifactId: string; rev: number }): Promise<ArtifactSnapshot | null>;
   /** Creates an empty draft. `planned` is how the scratchpad pre-plans the current workspace. */
   create(input?: { planned?: PlannedTarget[] }): Promise<ArtifactDetail>;
   update(input: {
