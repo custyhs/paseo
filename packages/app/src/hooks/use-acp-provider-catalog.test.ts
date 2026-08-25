@@ -34,6 +34,24 @@ describe("ACP provider catalog", () => {
     }
   });
 
+  /**
+   * The ZCode adapter needs `ZCODE_BIN` pointing at the CLI inside the desktop
+   * app. That path differs per machine and per platform, and this catalog runs
+   * on the client while the process is spawned on the host — so no value here
+   * could be right for both. Someone will eventually try to be helpful and add
+   * their own path; this is why they should not.
+   */
+  it("ships ZCode without guessing where its binary lives", () => {
+    const entry = findProvider("zcode");
+
+    expect(entry.command).toEqual(["zcode-acp-server"]);
+    expect(entry.env).toBeUndefined();
+    // The one line the UI shows has to point at the config step, because
+    // installing this without it fails on the first prompt and looks like
+    // nothing happened.
+    expect(entry.description).toMatch(/ZCODE_BIN/);
+  });
+
   it("does not offer Pi's unsupported ACP adapter", () => {
     expect(ACP_PROVIDER_CATALOG.some((entry) => entry.id === "pi-acp")).toBe(false);
   });

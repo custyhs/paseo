@@ -380,6 +380,22 @@ const CATALOG_DATA = [
       VT_ACP_ZED_ENABLED: "1",
     },
   },
+  {
+    id: "zcode",
+    title: "ZCode",
+    // No `env` here on purpose. The adapter needs ZCODE_BIN pointing at the CLI
+    // bundled inside the ZCode desktop app, and that path differs per machine
+    // and per platform — a catalog runs on the client while the process is
+    // spawned on the host, so there is no value this entry could carry that
+    // would be right for both. Installing this without ZCODE_BIN creates the
+    // session fine and then fails on the first prompt with `spawn zcode ENOENT`,
+    // which reads as "nothing happened". See docs/custom-providers.md.
+    description: "Z.ai's GLM coding agent over ACP. Needs ZCODE_BIN — see custom providers docs",
+    version: "0.1.0",
+    iconId: null,
+    installLink: "https://github.com/william0wang/zcode-acp",
+    command: ["zcode-acp-server"],
+  },
 ] as const;
 
 export const ACP_PROVIDER_CATALOG: AcpProviderCatalogEntry[] = CATALOG_DATA.map((entry) => ({

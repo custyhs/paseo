@@ -37,6 +37,7 @@ catalog probe. `PASEO_PROVIDER_REFRESH_TIMEOUT_MS` sets it when the config field
 
 - [Extending a built-in provider](#extending-a-built-in-provider)
 - [Z.AI (Zhipu) coding plan](#zai-zhipu-coding-plan)
+- [ZCode (Z.ai desktop agent)](#zcode-zai-desktop-agent)
 - [Alibaba Cloud (Qwen) coding plan](#alibaba-cloud-qwen-coding-plan)
 - [Codex with a custom OpenAI-compatible endpoint](#codex-with-a-custom-openai-compatible-endpoint)
 - [Multiple profiles for the same provider](#multiple-profiles-for-the-same-provider)
@@ -129,6 +130,82 @@ See [Codex with a custom OpenAI-compatible endpoint](#codex-with-a-custom-openai
 - Web search (`WebSearch` tool) is an Anthropic-only server-side feature — third-party endpoints don't support it. Add `"disallowedTools": ["WebSearch"]` to avoid errors.
 - Automated setup is also available: `npx @z_ai/coding-helper`
 - Official docs: [docs.z.ai/devpack/tool/claude](https://docs.z.ai/devpack/tool/claude)
+
+---
+
+## ZCode (Z.ai desktop agent)
+
+Not the same thing as the Z.AI section above. That one points Claude Code at
+Z.ai's Anthropic-compatible endpoint. This one runs **ZCode**, Z.ai's own
+desktop coding agent, through the community
+[zcode-acp-server](https://github.com/william0wang/zcode-acp) ACP adapter.
+
+### Setup
+
+1. Install the ZCode desktop app and sign in — it writes credentials to
+   `~/.zcode/v2/config.json`, which the adapter reads. No key goes in Paseo's config.
+2. Install the adapter and put `zcode-acp-server` on `PATH`.
+3. Add the provider, **including `ZCODE_BIN`**:
+
+```json
+{
+  "agents": {
+    "providers": {
+      "zcode": {
+        "extends": "acp",
+        "label": "ZCode",
+        "command": ["zcode-acp-server"],
+        "env": {
+          "ZCODE_BIN": "/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs"
+        }
+      }
+    }
+  }
+}
+```
+
+### `ZCODE_BIN` is not optional, and leaving it out fails late
+
+The `zcode` CLI ships **inside the desktop app** and is not added to `PATH`. The
+adapter falls back to spawning plain `zcode`, so without `ZCODE_BIN` it cannot
+find it.
+
+What makes this expensive to diagnose is _when_ it fails. The backend is spawned
+lazily, so everything before the first prompt succeeds:
+
+| Step          | Without `ZCODE_BIN`                          |
+| ------------- | -------------------------------------------- |
+| `initialize`  | succeeds, full capability set                |
+| `session/new` | succeeds, returns a session id and its modes |
+| first prompt  | `spawn zcode ENOENT`                         |
+
+In the app that reads as "the provider installed, the session opened, and then
+nothing happened." It is not a credentials problem and not a Paseo problem.
+
+The in-app ACP catalog entry deliberately carries no `env`: the path differs per
+machine and platform, and the catalog runs on the client while the process is
+spawned on the host. Installing from the catalog still needs this config step.
+
+| Platform | `ZCODE_BIN`                                                |
+| -------- | ---------------------------------------------------------- |
+| macOS    | `/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs` |
+| Windows  | `%LOCALAPPDATA%\Programs\ZCode\resources\glm\zcode.cjs`    |
+| Linux    | `<install-dir>/resources/glm/zcode.cjs`                    |
+
+If the path does not match your install:
+
+```bash
+find / -name zcode.cjs -path '*resources/glm*' 2>/dev/null
+```
+
+### Notes
+
+- The adapter needs a Node with `node:sqlite` (Node ≥ 22). It discovers one
+  itself; `ZCODE_NODE` overrides that.
+- `ZCODE_ACP_DEBUG=1` turns on verbose adapter logs when a session misbehaves.
+- The CLI's `paseo daemon status` does **not** list ACP providers — the daemon
+  hides them from clients that send no `appVersion`. Absence there is not
+  evidence the provider is missing; create an agent to check.
 
 ---
 
