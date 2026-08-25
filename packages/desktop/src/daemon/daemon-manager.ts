@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { app, ipcMain, powerMonitor } from "electron";
 import log from "electron-log/main";
-import { resolvePaseoHome, spawnProcess } from "@getpaseo/server";
+import { loadPersistedConfig, resolvePaseoHome, spawnProcess } from "@getpaseo/server";
 import {
   copyAttachmentFileToManagedStorage,
   deleteManagedAttachmentFile,
@@ -120,6 +120,29 @@ function getPaseoHome(): string {
 
 function logFilePath(): string {
   return path.join(getPaseoHome(), DAEMON_LOG_FILENAME);
+}
+
+/**
+ * The desktop app is the UI, so the daemon it manages serves no web UI of its
+ * own — hence the `PASEO_WEB_UI_ENABLED: "false"` overlay below.
+ *
+ * That overlay is an env var, and env beats config.json in the daemon's own
+ * precedence chain, so it silently overrode anyone who asked for the web UI in
+ * their config. The request is legitimate: reaching this daemon from a phone
+ * browser wants a UI served from the same port, and the desktop app being open
+ * does not change that.
+ *
+ * So the default stands, and an explicit `true` in config.json is honoured.
+ * Explicit `false` and absent both keep the old behaviour, which is what makes
+ * this safe to leave on.
+ */
+function webUiExplicitlyEnabledInConfig(): boolean {
+  try {
+    return loadPersistedConfig(getPaseoHome()).features?.webUi?.enabled === true;
+  } catch {
+    // A config we cannot read is a config that asked for nothing.
+    return false;
+  }
 }
 
 export function isDesktopManagedDaemonRunningSync(): boolean {
@@ -404,7 +427,7 @@ async function startDaemon(): Promise<DesktopDaemonStatus> {
     envOverlay: {
       PASEO_DESKTOP_MANAGED: "1",
       PASEO_CLI: getBundledCliShimPath(),
-      PASEO_WEB_UI_ENABLED: "false",
+      ...(webUiExplicitlyEnabledInConfig() ? {} : { PASEO_WEB_UI_ENABLED: "false" }),
     },
     stdio: ["ignore", "ignore", "ignore"],
   });

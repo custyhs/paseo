@@ -8,6 +8,7 @@ import { createDaemonCommandHandlers } from "./daemon-manager";
 
 const mocks = vi.hoisted(() => ({
   paseoHome: "/tmp/paseo-desktop-daemon-manager-test-home",
+  persistedConfig: {} as { features?: { webUi?: { enabled?: boolean } } },
   settings: {
     releaseChannel: "stable",
     daemon: {
@@ -54,6 +55,7 @@ vi.mock("electron-log/main", () => ({
 vi.mock("@getpaseo/server", () => ({
   resolvePaseoHome: vi.fn(() => mocks.paseoHome),
   spawnProcess: mocks.spawnProcess,
+  loadPersistedConfig: () => mocks.persistedConfig,
 }));
 
 vi.mock("../settings/desktop-settings-electron.js", () => ({
@@ -112,6 +114,7 @@ function scheduleFailedStartup(child: MockChildProcess): void {
 describe("daemon-manager commands", () => {
   beforeEach(() => {
     mocks.settings = DEFAULT_DESKTOP_SETTINGS;
+    mocks.persistedConfig = {};
     mocks.runExternalCliJsonCommand.mockReset();
     mocks.runExternalCliTextCommand.mockReset();
     mocks.createNodeEntrypointInvocation.mockReset();
@@ -458,6 +461,35 @@ describe("daemon-manager commands", () => {
         }),
       }),
     );
+  });
+
+  /**
+   * The overlay is an env var and env beats config.json inside the daemon, so
+   * forcing it unconditionally made `features.webUi.enabled` unsettable from
+   * the desktop app — the setting was there and did nothing. Serving the UI on
+   * the daemon's own port is what makes it reachable from a phone browser, and
+   * the desktop app being open is unrelated to that.
+   */
+  it("lets an explicit web UI opt-in through instead of forcing it off", async () => {
+    mocks.persistedConfig = { features: { webUi: { enabled: true } } };
+    mocks.runExternalCliJsonCommand.mockResolvedValue({
+      localDaemon: "stopped",
+      connectedDaemon: "unreachable",
+      serverId: "",
+    });
+    mocks.spawnProcess.mockImplementation(() => {
+      const child = createMockChildProcess();
+      scheduleFailedStartup(child);
+      return child;
+    });
+    const handlers = createDaemonCommandHandlers();
+
+    await handlers.start_desktop_daemon().catch(() => undefined);
+
+    const overlay = mocks.spawnProcess.mock.calls.at(-1)?.[2]?.envOverlay ?? {};
+    expect(overlay).not.toHaveProperty("PASEO_WEB_UI_ENABLED");
+    // The rest of the overlay is untouched.
+    expect(overlay).toMatchObject({ PASEO_DESKTOP_MANAGED: "1" });
   });
 
   it("passes stale lock reclaim only after a live desktop daemon is confirmed unresponsive", async () => {
