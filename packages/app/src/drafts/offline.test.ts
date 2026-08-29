@@ -172,6 +172,82 @@ describe("saving while the daemon is unreachable", () => {
   });
 });
 
+/**
+ * The title was displayed but never editable — the field, the RPC and the
+ * storage all supported it, and nothing wired an input to them. Because
+ * `draftDisplayTitle` falls back to the body's first line, a draft always
+ * *showed* a heading, which is why it read as working.
+ */
+describe("editing the title", () => {
+  test("a title reaches the daemon", async () => {
+    const { loop, source, inner, created } = await harness();
+    source.reachable = true;
+
+    loop.onChangeTitle("Parser incremental update");
+    await loop.flush();
+
+    expect((await inner.get(created.id))?.title).toBe("Parser incremental update");
+  });
+
+  test("clearing the title stores null, not an empty heading", async () => {
+    const { loop, source, inner, created } = await harness();
+    source.reachable = true;
+    loop.onChangeTitle("something");
+    await loop.flush();
+
+    loop.onChangeTitle("   ");
+    await loop.flush();
+
+    // Null is what the list falls back from; "" would be a title you cannot see
+    // and cannot get rid of.
+    expect((await inner.get(created.id))?.title).toBeNull();
+  });
+
+  test("title and body ride one write, so they cannot race each other", async () => {
+    const { loop, source, inner, created } = await harness();
+    source.reachable = true;
+
+    loop.onChangeTitle("A heading");
+    loop.onChangeText("A body");
+    await loop.flush();
+
+    const saved = await inner.get(created.id);
+    expect(saved?.title).toBe("A heading");
+    expect(saved?.body).toBe("A body");
+    // One write, not two: they share a `version`, so two writers would collide
+    // with each other on every other keystroke.
+    expect(saved?.version).toBe(created.version + 1);
+  });
+
+  test("a title typed while offline is checkpointed and survives a restart", async () => {
+    const storage = fakeStorage();
+    const { loop, created } = await harness({ storage });
+
+    loop.onChangeTitle("written while unreachable");
+    await loop.flush();
+    await settle();
+
+    const afterRestart = new DraftCheckpointStore(storage);
+    await afterRestart.load();
+    expect(afterRestart.get("host-1", created.id)?.title).toBe("written while unreachable");
+  });
+
+  test("a title-only edit does not checkpoint a body nobody typed", async () => {
+    const storage = fakeStorage();
+    const { loop, created } = await harness({ storage });
+
+    loop.onChangeTitle("just the heading");
+    await loop.flush();
+    await settle();
+
+    const afterRestart = new DraftCheckpointStore(storage);
+    await afterRestart.load();
+    // Writing the saved body back would claim an edit that never happened, and
+    // a later replay would overwrite whatever the daemon has.
+    expect(afterRestart.get("host-1", created.id)?.body).toBeUndefined();
+  });
+});
+
 describe("a draft changed by another client", () => {
   async function conflicted() {
     const context = await harness();

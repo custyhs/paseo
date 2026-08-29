@@ -26,8 +26,19 @@ export type DraftSaveState =
   /** Someone else changed the draft. `remote` is the record as it now stands. */
   | { status: "conflict"; remote: ArtifactDetail };
 
+/**
+ * One edit still owed to the daemon. Title and body share a queue because they
+ * share a `version`: two independent writers would each send their own
+ * `baseVersion` and collide with each other on every other keystroke.
+ */
+interface PendingEdit {
+  title?: string | null;
+  body?: string;
+}
+
 export interface DraftSaveLoop {
   onChangeText: (next: string) => void;
+  onChangeTitle: (next: string) => void;
   /** Writes anything outstanding now, without waiting for the debounce. */
   flush: () => Promise<void>;
   hasPendingText: () => boolean;
@@ -56,7 +67,7 @@ export function createDraftSaveLoop(input: {
   const debounceMs = input.debounceMs ?? DRAFT_WRITE_DEBOUNCE_MS;
 
   let version = input.version;
-  let pending: string | null = null;
+  let pending: PendingEdit | null = null;
   let inFlight = false;
   let disposed = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -73,10 +84,10 @@ export function createDraftSaveLoop(input: {
     onState({ status: "saving" });
     try {
       while (pending !== null) {
-        const body = pending;
+        const sent = pending;
         let saved: ArtifactDetail;
         try {
-          saved = await source.update({ artifactId, baseVersion: version, body });
+          saved = await source.update({ artifactId, baseVersion: version, ...sent });
         } catch (error) {
           // The text stays queued and stays checkpointed. Retrying is the next
           // keystroke, the next flush, or reconnecting — never a lost paragraph.
@@ -91,8 +102,9 @@ export function createDraftSaveLoop(input: {
         version = saved.version;
         onSaved?.(saved);
         // Newer keystrokes may have landed during the await; those are still
-        // owed to the daemon, so only retire the text we actually sent.
-        if (pending === body) pending = null;
+        // owed to the daemon, so only retire the edit we actually sent. Every
+        // keystroke replaces the object, so identity is the whole comparison.
+        if (pending === sent) pending = null;
       }
       await checkpoints.clear(serverId, artifactId);
       onState({ status: "saved" });
@@ -101,26 +113,40 @@ export function createDraftSaveLoop(input: {
     }
   };
 
+  /**
+   * The checkpoint is not debounced. It exists precisely to cover the window
+   * before the daemon hears about this, so it has to be written inside that
+   * window. Only the daemon hop is debounced.
+   */
+  const queue = (edit: PendingEdit) => {
+    if (disposed) return;
+    pending = { ...pending, ...edit };
+    const carried = pending;
+    void checkpoints.put({
+      serverId,
+      artifactId,
+      ...(carried.body !== undefined ? { body: carried.body } : {}),
+      ...(carried.title !== undefined ? { title: carried.title } : {}),
+      baseVersion: version,
+      updatedAt: now(),
+    });
+    onState({ status: "unsaved" });
+    cancelTimer();
+    timer = setTimeout(() => {
+      timer = null;
+      void flush();
+    }, debounceMs);
+  };
+
   return {
     onChangeText(next: string) {
-      if (disposed) return;
-      pending = next;
-      // The checkpoint is not debounced. It exists precisely to cover the
-      // window before the daemon hears about this, so it has to be written
-      // inside that window.
-      void checkpoints.put({
-        serverId,
-        artifactId,
-        body: next,
-        baseVersion: version,
-        updatedAt: now(),
-      });
-      onState({ status: "unsaved" });
-      cancelTimer();
-      timer = setTimeout(() => {
-        timer = null;
-        void flush();
-      }, debounceMs);
+      queue({ body: next });
+    },
+
+    onChangeTitle(next: string) {
+      // Empty means "no title of its own", which is what the list falls back
+      // from — not an empty heading.
+      queue({ title: next.trim() === "" ? null : next });
     },
 
     flush,

@@ -133,6 +133,35 @@ test.describe("Drafts destination", () => {
     ).toBeVisible({ timeout: 15_000 });
   });
 
+  /**
+   * The title rendered as read-only text for a long time and nobody noticed,
+   * because `draftDisplayTitle` falls back to the body's first line — so a
+   * draft always had a heading, it just was not yours to set.
+   */
+  test("a draft title can be typed and survives a reload", async ({ page }) => {
+    await gotoAppShell(page);
+    await shown(page, "sidebar-drafts").click();
+    await expect(shown(page, "drafts-screen")).toBeVisible({ timeout: 30_000 });
+
+    await shown(page, "drafts-new-draft").click();
+    await expect(shown(page, "draft-editor")).toBeVisible({ timeout: 15_000 });
+
+    const title = `title ${Date.now()}`;
+    await shown(page, "draft-title").fill(title);
+    await shown(page, "draft-body").fill("body that would otherwise be the heading");
+    await expect(shown(page, "draft-editor")).toContainText("Saved", { timeout: 15_000 });
+
+    await page.reload();
+    await shown(page, "sidebar-drafts").click();
+    await expect(shown(page, "drafts-screen")).toBeVisible({ timeout: 30_000 });
+
+    // The stored title wins over the body's first line, which is how you can
+    // tell it was really saved rather than derived.
+    await expect(
+      shown(page, "drafts-list").getByText(title).filter({ visible: true }).first(),
+    ).toBeVisible({ timeout: 30_000 });
+  });
+
   test("lists somewhere to plan a draft for", async ({ page, withWorkspace }) => {
     // The picker reads workspaces out of the session store, where they live in a
     // Map. `Object.values()` on a Map yields nothing and type-checks anyway, so

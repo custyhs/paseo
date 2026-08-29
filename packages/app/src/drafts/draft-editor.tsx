@@ -5,7 +5,6 @@ import { useTranslation } from "react-i18next";
 import { EditingTextInput } from "@/components/ui/text-input";
 import { useDraftsSource } from "./context";
 import {
-  draftDisplayTitle,
   isDiscardableDraft,
   plannedTargetKey,
   type ArtifactDetail,
@@ -240,6 +239,7 @@ export function DraftEditor({
   );
 
   const onChangeText = loop.onChangeText;
+  const onChangeTitle = loop.onChangeTitle;
 
   const onReloadRemote = useCallback(() => {
     if (saveState.status !== "conflict") return;
@@ -326,9 +326,21 @@ export function DraftEditor({
   return (
     <View testID="draft-editor" style={styles.container}>
       <View style={styles.head}>
-        <Text numberOfLines={1} style={styles.title}>
-          {draftDisplayTitle(artifact) ?? t("drafts.labels.untitled")}
-        </Text>
+        {/*
+          Uncontrolled, like the body: `EditingTextInput` takes `initialValue`
+          because a controlled value fights IME composition. `artifact.title` is
+          the stored one, not `draftDisplayTitle` — that derives a heading from
+          the first line of the body when there is no title, and showing derived
+          text in an editable field would make it look like a title you own and
+          then silently overwrite the body's first line into a real one.
+        */}
+        <ThemedTextInput
+          testID="draft-title"
+          initialValue={artifact.title ?? ""}
+          onChangeText={onChangeTitle}
+          placeholder={t("drafts.editor.titlePlaceholder")}
+          style={styles.title}
+        />
         <Text style={saveState.status === "saved" ? styles.saveChip : styles.saveChipPending}>
           {t(SAVE_CHIP_KEY[saveState.status])}
         </Text>
