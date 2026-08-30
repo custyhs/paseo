@@ -1,0 +1,48 @@
+schema: spec-driven
+
+context: |
+  Language: en
+  All artifacts must be written in en.
+  Keep OpenSpec structural headings and SHALL/MUST keywords in English.
+
+  Project nature: this repository is a personal fork of the official Paseo
+  project (upstream remote: https://github.com/getpaseo/paseo). The goal is
+  NOT to develop Paseo itself, but to add and maintain custom features on
+  top of upstream while staying easy to rebase.
+
+  Branch model:
+  - `upstream/main`: official Paseo main branch. Never commit to `main`
+    locally; `main` only mirrors upstream.
+  - `diy`: the long-lived personal branch. All custom features land here.
+  - Periodically sync: `git fetch upstream && git rebase upstream/main`
+    (or merge) on `diy`.
+
+  Spec scope: `openspec/specs/` describes ONLY the custom capabilities
+  added in this fork (the delta vs upstream), never upstream's own
+  behavior. Each archived change updates the delta specs so the full set
+  of custom features is always readable from `openspec/specs/`.
+
+  Codebase: TypeScript monorepo (npm workspaces under `packages/`), tests
+  via vitest. Follow upstream's existing conventions (see CLAUDE.md /
+  CONTRIBUTING.md at repo root) for any code touching upstream files.
+
+rules:
+  proposal:
+    - Always include an "Upstream impact" section listing which upstream
+      files/packages will be modified vs which files are purely new, and
+      the expected rebase/merge-conflict risk (low/medium/high).
+    - Prefer designs that add new files or extension points over editing
+      upstream code in place, to minimize rebase conflicts.
+  tasks:
+    - Keep each task small enough to verify independently (build or test
+      passes after each task).
+
+operations:
+  apply:
+    guidance:
+      - Run the narrowest relevant test/build check after each task.
+      - Do not reformat or refactor upstream code unrelated to the change.
+  archive:
+    guidance:
+      - Confirm delta specs under openspec/specs/ reflect the shipped
+        behavior before archiving.
