@@ -1,6 +1,9 @@
 import { test, expect } from "../support/fixtures";
 import { gotoAppShell } from "../support/helpers/app";
-import { ensureExplorerSidebar } from "../support/helpers/workspace-tabs";
+import {
+  ensureExplorerSidebar,
+  waitForWorkspaceTabsVisible,
+} from "../support/helpers/workspace-tabs";
 import type { Page } from "@playwright/test";
 
 /** React Native web keeps offscreen copies around; assert against the shown one. */
@@ -179,7 +182,7 @@ test.describe("Drafts destination", () => {
 });
 
 test.describe("Scratchpad side panel", () => {
-  test("opens from the pane menu instead of doing nothing", async ({ page, withWorkspace }) => {
+  test("opens from the new tab menu instead of doing nothing", async ({ page, withWorkspace }) => {
     const workspace = await withWorkspace({ prefix: "drafts-scratchpad-" });
     await workspace.navigateTo();
 
@@ -187,11 +190,37 @@ test.describe("Scratchpad side panel", () => {
     // looks exactly like a click that did nothing.
     //
     // The menu item's id comes from the launch catalog, so `-scratchpad` is
-    // generated rather than hand-placed. The trigger is not: upstream renamed it
-    // from `workspace-new-tab-menu-trigger` in #3715.
-    const panel = await ensureExplorerSidebar(page);
-    await panel.getByTestId("workspace-new-tab-button").click();
+    // generated rather than hand-placed. The trigger is not: it moved out of the
+    // Explorer sidebar in #3826, which now docks three fixed views and offers no
+    // `+` of its own.
+    await shown(page, "workspace-new-tab-button").click();
     await shown(page, "workspace-new-tab-menu-scratchpad").click();
+
+    await expect(shown(page, "scratchpad-panel")).toBeVisible({ timeout: 30_000 });
+  });
+
+  test("opens in the Explorer sidebar, which its manifest claims it can", async ({
+    page,
+    withWorkspace,
+  }) => {
+    const workspace = await withWorkspace({ prefix: "drafts-scratchpad-explorer-" });
+    await workspace.navigateTo();
+
+    // `panel-manifest` lists `explorer` among the scratchpad's supported hosts.
+    // Nothing else checks that claim: the launcher filters by it silently, so a
+    // wrong entry means the item is simply missing from a menu nobody opened.
+    // The Explorer's new tab lives on the rail's context menu, not on a button.
+    // The Explorer toggle exists before the workspace finishes mounting, so
+    // revealing it too early leaves the shell on "No projects yet".
+    await waitForWorkspaceTabsVisible(page);
+    const explorer = await ensureExplorerSidebar(page);
+    // Past the tabs: right-clicking one of them opens that tab's own menu, whose
+    // only item is Close.
+    await explorer
+      .getByTestId("explorer-sidebar-tab-rail")
+      .click({ button: "right", position: { x: 220, y: 10 } });
+    await page.getByText("New tab", { exact: true }).click();
+    await shown(page, "workspace-new-tab-scratchpad").click();
 
     await expect(shown(page, "scratchpad-panel")).toBeVisible({ timeout: 30_000 });
   });
@@ -200,8 +229,7 @@ test.describe("Scratchpad side panel", () => {
     const workspace = await withWorkspace({ prefix: "drafts-scratchpad-plan-" });
     await workspace.navigateTo();
 
-    const panel = await ensureExplorerSidebar(page);
-    await panel.getByTestId("workspace-new-tab-button").click();
+    await shown(page, "workspace-new-tab-button").click();
     await shown(page, "workspace-new-tab-menu-scratchpad").click();
     await expect(shown(page, "scratchpad-panel")).toBeVisible({ timeout: 30_000 });
 
