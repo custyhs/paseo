@@ -5,7 +5,7 @@ import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import invariant from "tiny-invariant";
 import { usePaneContext } from "@/panels/pane-context";
-import type { PanelRegistration } from "@/panels/panel-registry";
+import { definePanel } from "@/panels/panel-registry";
 import { DraftsSourceProvider, useAllDrafts } from "@/drafts/context";
 import { useHostDraftsAvailability } from "@/drafts/use-host-source";
 import { useWorkspaceProjectLookup } from "@/drafts/workspaces";
@@ -245,12 +245,10 @@ function ScratchpadPanel() {
   );
 }
 
-export const scratchpadPanelRegistration: PanelRegistration<"scratchpad"> = {
-  kind: "scratchpad",
-  resourceKey: () => "scratchpad",
+export const scratchpadPanelRegistration = definePanel("scratchpad", {
   component: ScratchpadPanel,
   useDescriptor: useScratchpadDescriptor,
-};
+});
 
 const styles = StyleSheet.create((theme) => ({
   container: { flex: 1 },

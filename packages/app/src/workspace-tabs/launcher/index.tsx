@@ -203,6 +203,7 @@ export function useWorkspaceTabLaunchCatalog(input: {
         // No `shortcutActionId`: drafts have no registered shortcut yet (D18),
         // and naming one here would render a hint for a key that does nothing.
         disabled: false,
+        panelKind: "scratchpad",
         launch: launchSelection(BUILT_IN_SELECTIONS.scratchpad),
       },
     };

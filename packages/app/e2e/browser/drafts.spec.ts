@@ -1,6 +1,6 @@
 import { test, expect } from "../support/fixtures";
 import { gotoAppShell } from "../support/helpers/app";
-import { ensureSidePanel } from "../support/helpers/workspace-tabs";
+import { ensureExplorerSidebar } from "../support/helpers/workspace-tabs";
 import type { Page } from "@playwright/test";
 
 /** React Native web keeps offscreen copies around; assert against the shown one. */
@@ -189,7 +189,7 @@ test.describe("Scratchpad side panel", () => {
     // The menu item's id comes from the launch catalog, so `-scratchpad` is
     // generated rather than hand-placed. The trigger is not: upstream renamed it
     // from `workspace-new-tab-menu-trigger` in #3715.
-    const panel = await ensureSidePanel(page);
+    const panel = await ensureExplorerSidebar(page);
     await panel.getByTestId("workspace-new-tab-button").click();
     await shown(page, "workspace-new-tab-menu-scratchpad").click();
 
@@ -200,7 +200,7 @@ test.describe("Scratchpad side panel", () => {
     const workspace = await withWorkspace({ prefix: "drafts-scratchpad-plan-" });
     await workspace.navigateTo();
 
-    const panel = await ensureSidePanel(page);
+    const panel = await ensureExplorerSidebar(page);
     await panel.getByTestId("workspace-new-tab-button").click();
     await shown(page, "workspace-new-tab-menu-scratchpad").click();
     await expect(shown(page, "scratchpad-panel")).toBeVisible({ timeout: 30_000 });
