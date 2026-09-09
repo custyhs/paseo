@@ -2090,6 +2090,10 @@ export const zhCN: TranslationResources = {
         title: "聊天大纲",
         description: "显示用于在提示词之间跳转的大纲",
       },
+      chatMath: {
+        title: "LaTeX 公式",
+        description: "在 Agent 回复中渲染 $…$ 和 $$…$$ 公式",
+      },
       sidebar: {
         title: "侧边栏",
         description: "选择侧边栏顶部显示的项目及其顺序",

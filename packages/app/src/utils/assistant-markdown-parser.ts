@@ -2,8 +2,18 @@ import type MarkdownIt from "markdown-it";
 import { markdownMathPlugin } from "@/components/markdown/math/plugin";
 import { createMarkdownParser } from "@/utils/markdown-parser";
 
-export function createAssistantMarkdownParser(): MarkdownIt {
-  const parser = createMarkdownParser({ linkify: true }).use(markdownMathPlugin);
+export interface AssistantMarkdownParserOptions {
+  /** Off leaves `$…$` as prose, the behavior before math rendering existed. */
+  math: boolean;
+}
+
+export function createAssistantMarkdownParser({
+  math,
+}: AssistantMarkdownParserOptions): MarkdownIt {
+  const parser = createMarkdownParser({ linkify: true });
+  if (math) {
+    parser.use(markdownMathPlugin);
+  }
   const defaultValidateLink = parser.validateLink.bind(parser);
 
   // Assistant messages are the only surface allowed to link into the

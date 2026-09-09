@@ -1,6 +1,8 @@
 import { createAssistantMarkdownParser } from "./assistant-markdown-parser";
 
-const markdownRenderer = createAssistantMarkdownParser();
+// Math stays off: markdown-it has no HTML rule for the math tokens, and the
+// clipboard html should carry the same TeX source as the plain-text half.
+const markdownRenderer = createAssistantMarkdownParser({ math: false });
 
 type ClipboardMimeType = "text/plain" | "text/html";
 

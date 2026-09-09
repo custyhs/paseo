@@ -2219,6 +2219,10 @@ export const en = {
         title: "Chat outline",
         description: "Show an outline for jumping between prompts",
       },
+      chatMath: {
+        title: "LaTeX math",
+        description: "Render $…$ and $$…$$ formulas in agent replies",
+      },
       sidebar: {
         title: "Sidebar",
         description: "Choose which items appear at the top of the sidebar and in what order",

@@ -2131,6 +2131,10 @@ export const ja: TranslationResources = {
         title: "チャットのアウトライン",
         description: "プロンプト間を移動するためのアウトラインを表示します",
       },
+      chatMath: {
+        title: "LaTeX 数式",
+        description: "エージェントの返答にある $…$ と $$…$$ の数式をレンダリングします",
+      },
       sidebar: {
         title: "サイドバー",
         description: "サイドバー上部に表示する項目とその順序を選択します",

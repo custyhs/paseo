@@ -3,7 +3,7 @@ import { createAssistantMarkdownParser } from "./assistant-markdown-parser";
 
 describe("createAssistantMarkdownParser", () => {
   it("renders agent text verbatim", () => {
-    const parser = createAssistantMarkdownParser();
+    const parser = createAssistantMarkdownParser({ math: true });
 
     // The reported bug, plus the substitutions that share its cause.
     expect(parser.renderInline("(c) (C) (r) (tm) (p)")).toBe("(c) (C) (r) (tm) (p)");
@@ -15,13 +15,13 @@ describe("createAssistantMarkdownParser", () => {
   });
 
   it("allows file:// links, unlike every other parser", () => {
-    const parser = createAssistantMarkdownParser();
+    const parser = createAssistantMarkdownParser({ math: true });
 
     expect(parser.render("[open](file:///tmp/a.ts)")).toContain('href="file:///tmp/a.ts"');
   });
 
   it("still rejects javascript: links", () => {
-    const parser = createAssistantMarkdownParser();
+    const parser = createAssistantMarkdownParser({ math: true });
 
     expect(parser.render("[x](javascript:alert(1))")).not.toContain("href");
   });
@@ -29,7 +29,7 @@ describe("createAssistantMarkdownParser", () => {
 
 describe("createAssistantMarkdownParser math", () => {
   it("emits math tokens for inline and display math", () => {
-    const parser = createAssistantMarkdownParser();
+    const parser = createAssistantMarkdownParser({ math: true });
     const tokens = parser.parse("Loss $x^2$ here\n\n$$\ny = 1\n$$", {});
     const inline = tokens.find((token) => token.type === "inline");
 
@@ -40,5 +40,17 @@ describe("createAssistantMarkdownParser math", () => {
       "paragraph_close",
       "math_block",
     ]);
+  });
+
+  it("leaves math delimiters as prose when math rendering is off", () => {
+    const parser = createAssistantMarkdownParser({ math: false });
+    const tokens = parser.parse("Loss $x^2$ here\n\n$$\ny = 1\n$$", {});
+    const types = new Set(
+      tokens.flatMap((token) => (token.children ?? []).concat(token)).map((t) => t.type),
+    );
+
+    expect(types.has("math_inline")).toBe(false);
+    expect(types.has("math_block")).toBe(false);
+    expect(parser.renderInline("Loss $x^2$ here")).toBe("Loss $x^2$ here");
   });
 });

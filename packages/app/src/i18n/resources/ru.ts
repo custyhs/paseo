@@ -2150,6 +2150,10 @@ export const ru: TranslationResources = {
         title: "Оглавление чата",
         description: "Показывать оглавление для перехода между запросами",
       },
+      chatMath: {
+        title: "Формулы LaTeX",
+        description: "Отображать формулы $…$ и $$…$$ в ответах агента",
+      },
       sidebar: {
         title: "Боковая панель",
         description:

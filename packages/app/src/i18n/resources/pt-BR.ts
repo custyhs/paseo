@@ -2148,6 +2148,10 @@ export const ptBR: TranslationResources = {
         title: "Estrutura do chat",
         description: "Mostrar uma estrutura para navegar entre prompts",
       },
+      chatMath: {
+        title: "Fórmulas LaTeX",
+        description: "Renderizar as fórmulas $…$ e $$…$$ nas respostas do agente",
+      },
       sidebar: {
         title: "Barra lateral",
         description: "Escolha quais itens aparecem no topo da barra lateral e em que ordem",

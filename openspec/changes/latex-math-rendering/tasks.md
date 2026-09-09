@@ -20,3 +20,9 @@
 
 - [x] 4.1 Run `npm run typecheck`, `npm run lint`, and `npm run format` at the repo root and verify all pass with no diff from the formatter
 - [x] 4.2 Start the dev daemon and Expo web, send a math-heavy prompt to an agent, and verify inline and display math render typeset in the chat and a streaming `$$` block shows source until it closes (screenshot as evidence)
+
+## 5. Rendering toggle
+
+- [x] 5.1 Add `chatMathEnabled` (default true) to the app settings type, defaults, and persisted schema; verify the storage test covers the default and a persisted `false`
+- [x] 5.2 Make math opt-in on `createAssistantMarkdownParser({ math })` and read the setting in the assistant message; verify the parser test shows `$x^2$` staying prose when off
+- [x] 5.3 Add the "LaTeX math" switch row to Settings › Appearance with strings in all nine locales; verify the locale parity test passes and toggling the switch in the running web app swaps formulas and source without a reload

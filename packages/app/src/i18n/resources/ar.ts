@@ -2114,6 +2114,10 @@ export const ar: TranslationResources = {
         title: "مخطط المحادثة",
         description: "عرض مخطط للتنقل بين المطالبات",
       },
+      chatMath: {
+        title: "صيغ LaTeX",
+        description: "عرض الصيغ $…$ و $$…$$ في ردود الوكيل",
+      },
       sidebar: {
         title: "الشريط الجانبي",
         description: "اختر العناصر التي تظهر أعلى الشريط الجانبي وترتيبها",

@@ -98,3 +98,17 @@ On web, copying a selection of an assistant message that includes rendered math 
 
 - **WHEN** the user selects and copies a paragraph followed by a rendered `$$ ... $$` block
 - **THEN** the clipboard markdown contains the paragraph followed by the block source wrapped in `$$` delimiters
+
+### Requirement: Math rendering can be switched off
+
+The app SHALL offer a persisted, global "LaTeX math" switch under Settings › Appearance, on by default. When it is off, assistant messages SHALL show math delimiters and their contents as plain prose, exactly as before math rendering existed, on every platform. Changing the switch SHALL take effect in already open chats without a reload.
+
+#### Scenario: Switch off restores prose
+
+- **WHEN** the user turns the "LaTeX math" switch off
+- **THEN** an open assistant message containing `$x^2$` shows the text `$x^2$` and no typeset formula
+
+#### Scenario: Switch persists across restarts
+
+- **WHEN** the user turns the switch off and restarts the app
+- **THEN** the switch is still off and math still renders as prose

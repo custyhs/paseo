@@ -260,6 +260,23 @@ function ChatOutlineRow({ value, onChange }: ChatOutlineRowProps) {
   );
 }
 
+interface ChatMathRowProps {
+  value: boolean;
+  onChange: (value: boolean) => void;
+}
+
+function ChatMathRow({ value, onChange }: ChatMathRowProps) {
+  const { t } = useTranslation();
+  return (
+    <SettingsSwitch
+      label={t("settings.appearance.chatMath.title")}
+      hint={t("settings.appearance.chatMath.description")}
+      value={value}
+      onValueChange={onChange}
+    />
+  );
+}
+
 const TOOL_CALL_DETAIL_LEVELS: readonly AppSettings["toolCallDetailLevel"][] = [
   "detailed",
   "overview",
@@ -577,6 +594,13 @@ export function AppearanceSection() {
     [updateSettings],
   );
 
+  const handleChatMathChange = useCallback(
+    (chatMathEnabled: boolean) => {
+      void updateSettings({ chatMathEnabled });
+    },
+    [updateSettings],
+  );
+
   const commitUiFontFamily = useCallback(
     (value: string) => {
       const sanitized = sanitizeFontFamily(value);
@@ -696,6 +720,7 @@ export function AppearanceSection() {
               onChange={handleChatOutlineChange}
             />
           ) : null}
+          <ChatMathRow value={settings.chatMathEnabled} onChange={handleChatMathChange} />
         </SettingsCard>
       </SettingsSection>
       <SidebarNavSection />

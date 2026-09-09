@@ -2168,6 +2168,10 @@ export const fr: TranslationResources = {
         title: "Plan de la discussion",
         description: "Afficher un plan pour passer d’une requête à l’autre",
       },
+      chatMath: {
+        title: "Formules LaTeX",
+        description: "Afficher les formules $…$ et $$…$$ dans les réponses de l’agent",
+      },
       sidebar: {
         title: "Barre latérale",
         description: "Choisissez les éléments affichés en haut de la barre latérale et leur ordre",

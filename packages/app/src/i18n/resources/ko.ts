@@ -2125,6 +2125,10 @@ export const ko: TranslationResources = {
         title: "채팅 개요",
         description: "프롬프트 사이를 이동하기 위한 개요 표시",
       },
+      chatMath: {
+        title: "LaTeX 수식",
+        description: "에이전트 응답의 $…$ 및 $$…$$ 수식을 렌더링",
+      },
       sidebar: {
         title: "사이드바",
         description: "사이드바 상단에 표시할 항목과 순서를 선택하세요",

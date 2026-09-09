@@ -71,6 +71,7 @@ import type { MarkdownPhase } from "@/components/markdown/fence/types";
 import { mathMarkdownRules } from "@/components/markdown/math/rules";
 import { splitMarkdownBlocks } from "@/utils/split-markdown-blocks";
 import { useRevealedText } from "@/hooks/use-revealed-text";
+import { useSettings } from "@/hooks/use-settings";
 import { colorMarkdownLinkChildren } from "@/components/markdown/link-children";
 import { createAssistantMarkdownParser } from "@/utils/assistant-markdown-parser";
 import { formatDuration, formatMessageTimestamp } from "@/utils/time";
@@ -1501,7 +1502,11 @@ export const AssistantMessage = memo(function AssistantMessage({
   phase,
 }: AssistantMessageProps) {
   const { t } = useTranslation();
-  const markdownParser = useMemo(createAssistantMarkdownParser, []);
+  const chatMathEnabled = useSettings((settings) => settings.chatMathEnabled);
+  const markdownParser = useMemo(
+    () => createAssistantMarkdownParser({ math: chatMathEnabled }),
+    [chatMathEnabled],
+  );
   const renderedMessage = useMemo(() => capAssistantMessageForRender(message), [message]);
   // Paint a paced prefix while the turn is streaming so text arrives at a steady
   // rate instead of in whatever lumps the daemon's coalescing window produced.

@@ -56,6 +56,12 @@ The web view renders two siblings inside a wrapper tagged `data-paseo-markdown-t
 
 Alternative considered: KaTeX's `copy-tex` contrib. It hooks the document copy event and would fight Paseo's own selection-to-markdown handler.
 
+### The toggle gates the tokenizer, not the renderer
+
+`chatMathEnabled` lives in the existing app settings store (persisted, validated, global), next to `chatOutlineEnabled`. The assistant message reads it with a `useSettings` selector and builds its parser with `createAssistantMarkdownParser({ math })`. When off, the plugin is not applied, so no math tokens exist and `$...$` falls through to prose; the render rules stay registered and are simply never reached. Gating at the parser keeps a single source of truth for what the delimiters mean and makes the off state identical to the pre-feature behavior.
+
+Alternative considered: keep tokenizing and render source text in the rules when off. Rejected because the plugin also changes how `\(` and `\$` escape, so prose would still differ from the pre-feature output.
+
 ## Risks / Trade-offs
 
 - [Web bundle grows by roughly 700 KB uncompressed] → KaTeX and the stylesheet are imported only from `view.web.tsx`, so native bundles are untouched; the daemon-bundled UI already precompresses assets, and the fonts are the same ones every KaTeX site ships.

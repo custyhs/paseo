@@ -2164,6 +2164,10 @@ export const es: TranslationResources = {
         title: "Esquema del chat",
         description: "Muestra un esquema para saltar entre instrucciones",
       },
+      chatMath: {
+        title: "Fórmulas LaTeX",
+        description: "Renderizar las fórmulas $…$ y $$…$$ en las respuestas del agente",
+      },
       sidebar: {
         title: "Barra lateral",
         description:
