@@ -553,3 +553,40 @@ describe("assistant selection copy inside highlighted code", () => {
     );
   });
 });
+
+describe("assistant selection copy with rendered math", () => {
+  const mathFixture = `
+    <div data-testid="assistant-message">
+      <div data-paseo-markdown-tag="p"><span>The loss is <span data-paseo-markdown-tag="math"><span data-paseo-markdown-ignore="true"><span class="katex">glyphs</span></span><span>$x^2$</span></span> per batch.</span></div>
+      <div data-paseo-markdown-tag="math"><div data-paseo-markdown-ignore="true"><span class="katex-display">glyphs</span></div><span>$$
+x_1 + x_2 = 1
+$$</span></div>
+    </div>
+  `;
+
+  function mountMathFixture(): HTMLElement {
+    const host = document.createElement("div");
+    host.innerHTML = mathFixture;
+    document.body.append(host);
+    const message = host.querySelector<HTMLElement>('[data-testid="assistant-message"]');
+    if (!message) {
+      throw new Error("Expected assistant message fixture");
+    }
+    return message;
+  }
+
+  it("copies inline math as its delimited source instead of the glyph markup", () => {
+    const message = mountMathFixture();
+    const paragraph = fixtureElement(message, '[data-paseo-markdown-tag="p"]');
+
+    expect(copiedMarkdown(selectNodeContents(paragraph))).toBe("The loss is $x^2$ per batch.");
+  });
+
+  it("copies a display block with its delimiters and no markdown escaping", () => {
+    const message = mountMathFixture();
+
+    expect(copiedMarkdown(selectNodeContents(message))).toBe(
+      "The loss is $x^2$ per batch.\n\n$$ x_1 + x_2 = 1 $$",
+    );
+  });
+});

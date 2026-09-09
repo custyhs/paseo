@@ -30,6 +30,7 @@ export const markdownCopyDataSet = {
   ignore: { paseoMarkdownIgnore: "true" },
   li: { paseoMarkdownTag: "li" },
   listMarker: { paseoMarkdownIgnore: "true", paseoMarkdownListMarker: "true" },
+  math: { paseoMarkdownTag: "math" },
   ol: { paseoMarkdownTag: "ol" },
   p: { paseoMarkdownTag: "p" },
   pre: { paseoMarkdownTag: "pre" },
@@ -46,7 +47,7 @@ export const markdownCopyDataSet = {
   unwrap: { paseoMarkdownUnwrap: "true" },
 } as const;
 
-export type MarkdownCopyInlineTag = "br" | "code" | "em" | "s" | "strong";
+export type MarkdownCopyInlineTag = "br" | "code" | "em" | "math" | "s" | "strong";
 
 export function markdownCopyOrderedListDataSet(start: unknown) {
   return {

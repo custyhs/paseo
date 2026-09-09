@@ -26,3 +26,19 @@ describe("createAssistantMarkdownParser", () => {
     expect(parser.render("[x](javascript:alert(1))")).not.toContain("href");
   });
 });
+
+describe("createAssistantMarkdownParser math", () => {
+  it("emits math tokens for inline and display math", () => {
+    const parser = createAssistantMarkdownParser();
+    const tokens = parser.parse("Loss $x^2$ here\n\n$$\ny = 1\n$$", {});
+    const inline = tokens.find((token) => token.type === "inline");
+
+    expect(inline?.children?.map((token) => token.type)).toEqual(["text", "math_inline", "text"]);
+    expect(tokens.map((token) => token.type)).toEqual([
+      "paragraph_open",
+      "inline",
+      "paragraph_close",
+      "math_block",
+    ]);
+  });
+});

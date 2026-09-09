@@ -39,6 +39,14 @@ turndown.addRule("gfmStrikethrough", {
   filter: ["del", "s"],
   replacement: (content) => `~~${content}~~`,
 });
+// Rendered math carries its TeX source (delimiters included) as the element's
+// text. Turndown would otherwise escape the backslashes and underscores. The
+// HTML parser puts `<math>` in the MathML namespace, so its nodeName is lower
+// case, unlike every HTML tag.
+turndown.addRule("mathSource", {
+  filter: (node) => node.nodeName.toLowerCase() === "math",
+  replacement: (_content, node) => node.textContent ?? "",
+});
 turndown.addRule("compactListItem", {
   filter: "li",
   replacement: (content, node, options) => {

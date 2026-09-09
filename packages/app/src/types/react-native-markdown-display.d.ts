@@ -7,5 +7,8 @@ export type { ASTNode } from "react-native-markdown-display";
 declare module "react-native-markdown-display" {
   interface ASTNode {
     sourceInfo?: string;
+    // Same story for `sourceMeta` (`sourceMeta: token.meta`), which the math
+    // rules read for `display` and `closed`.
+    sourceMeta?: unknown;
   }
 }
