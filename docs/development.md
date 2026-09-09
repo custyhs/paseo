@@ -42,6 +42,24 @@ Linux produces the `paseo-desktop` launcher and desktop entry. macOS produces
 Electron runtime and the checkout's built daemon, client, and renderer rather
 than downloading a published desktop release.
 
+## Local desktop package
+
+Build an installable macOS app from the checkout on a machine that has no Apple
+Developer ID:
+
+```bash
+npm run build:desktop:local
+```
+
+Artifacts land in `packages/desktop/release/` as `Paseo-<version>-<arch>.dmg` and
+`.zip`. The build differs from `npm run build:desktop` only in
+`packages/desktop/electron-builder.local.yml`: hardened runtime off, notarization
+off, identity discovery off, publishing off. Without an identity electron-builder
+signs ad-hoc, and a hardened process refuses to load ad-hoc libraries, so the
+release script's output aborts at dyld on launch (`different Team IDs`) and every
+helper process dies the same way. The result launches only on the machine that
+built it; it is not distributable.
+
 ### PASEO_HOME
 
 `PASEO_HOME` is the directory that holds runtime state (agents, worktrees, workspace config, sockets, daemon log). Resolution rules:

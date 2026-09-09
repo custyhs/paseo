@@ -1,0 +1,13 @@
+# Local macOS build on a machine without a Developer ID certificate.
+#
+# Without an identity electron-builder falls back to an ad-hoc signature. The
+# release config keeps the hardened runtime on, and a hardened process refuses
+# to load ad-hoc libraries ("different Team IDs" at dyld), so the app aborts on
+# launch. Dropping the hardened runtime is what makes an ad-hoc build launch;
+# notarization needs Apple credentials the machine does not have.
+#
+# Build with `npm run build:desktop:local` from the repo root.
+extends: ./electron-builder.yml
+mac:
+  hardenedRuntime: false
+  notarize: false
