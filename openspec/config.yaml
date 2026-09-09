@@ -13,9 +13,9 @@ context: |
   Branch model:
   - `upstream/main`: official Paseo main branch. Never commit to `main`
     locally; `main` only mirrors upstream.
-  - `diy`: the long-lived personal branch. All custom features land here.
+  - `latex-render`: the long-lived personal branch. All custom features land here.
   - Periodically sync: `git fetch upstream && git rebase upstream/main`
-    (or merge) on `diy`.
+    (or merge) on `latex-render`.
 
   Spec scope: `openspec/specs/` describes ONLY the custom capabilities
   added in this fork (the delta vs upstream), never upstream's own
