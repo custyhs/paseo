@@ -28,14 +28,14 @@ Each of these is a single file: `npx vitest run <file> --bail=1`. Never run a wo
 - [x] 4.1 Run `packages/protocol/src/messages.drafts.test.ts` and `packages/protocol/tests/validation/ws-outbound.test.ts` and verify both pass, proving the new schemas compile through the patched zod-aot path
 - [x] 4.2 Run `packages/server/src/server/drafts/draft-storage.test.ts` and `packages/server/src/server/session/draft/draft-session.test.ts` and verify both pass
 - [x] 4.3 Run each of `packages/app/src/drafts/{autosave,model,offline,send,daemon-source,tab-integration,tab-open}.test.ts` and verify all seven pass
-- [ ] 4.4 Run the four touched upstream tests — `packages/app/src/sidebar-nav/model.test.ts`, `packages/app/src/workspace-tabs/launcher/internal/catalog.test.ts`, `packages/app/src/hooks/use-acp-provider-catalog.test.ts`, `packages/desktop/src/daemon/daemon-manager.test.ts` — and verify all pass
+- [x] 4.4 Run the four touched upstream tests — `packages/app/src/sidebar-nav/model.test.ts`, `packages/app/src/workspace-tabs/launcher/internal/catalog.test.ts`, `packages/app/src/hooks/use-acp-provider-catalog.test.ts`, `packages/desktop/src/daemon/daemon-manager.test.ts` — and verify all pass
 
 ## 5. Read the auto-merged registration files against current upstream
 
 A clean auto-merge says the text still applies, not that the contract still means the same thing. Upstream reshaped nav and launcher registration twice inside the sixty-commit window.
 
 - [x] 5.1 Read `packages/app/src/sidebar-nav/model.ts`, `packages/app/src/components/sidebar/sidebar-nav-rows.tsx`, and `packages/app/src/screens/settings/appearance/sidebar-nav-section.tsx` against upstream's current nav registration and verify the Drafts row is registered, orderable, and hideable the way every other row is
-- [ ] 5.2 Read `packages/app/src/workspace-tabs/{identity,model}.ts`, `packages/app/src/panels/{panel-manifest,register-panels}.ts`, and `packages/app/src/stores/workspace-layout-store.ts` and verify the `scratchpad` tab kind and panel are registered and persisted through the same contracts the other panels use
+- [x] 5.2 Read `packages/app/src/workspace-tabs/{identity,model}.ts`, `packages/app/src/panels/{panel-manifest,register-panels}.ts`, and `packages/app/src/stores/workspace-layout-store.ts` and verify the `scratchpad` tab kind and panel are registered and persisted through the same contracts the other panels use
 - [x] 5.3 Read `packages/app/src/app/_layout.tsx` and `packages/app/src/utils/host-routes.ts` against `docs/expo-router.md` and verify the `/drafts` route is owned the way the other screen routes are, with no effect on startup restore or active-workspace selection
 
 ## 6. Prove it in the real app
@@ -68,6 +68,6 @@ Run the dev daemon (`npm run dev`, port 6768) and the app (`npm run dev:app`, po
 ## 9. Land it
 
 - [x] 9.1 Re-run `npm run typecheck`, `npm run lint`, `npm run format:check`, and the task 4 test files, and verify all are green after the gap fixes and doc changes
-- [ ] 9.2 Merge `import-drafts` into `latex-render` as a fast-forward and verify `git log --graph --oneline -25` shows linear history with no merge commit
-- [ ] 9.3 Push `latex-render` to `origin` and verify the push succeeds
-- [ ] 9.4 Update `openspec/specs/` from this change's delta specs and archive the change, confirming the shipped behavior matches what the specs claim
+- [x] 9.2 Merge `import-drafts` into `latex-render` as a fast-forward and verify `git log --graph --oneline -25` shows linear history with no merge commit
+- [x] 9.3 Push `latex-render` to `origin` and verify the push succeeds
+- [x] 9.4 Update `openspec/specs/` from this change's delta specs and archive the change, confirming the shipped behavior matches what the specs claim
