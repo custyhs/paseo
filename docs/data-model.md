@@ -54,6 +54,11 @@ $PASEO_HOME/
 │       └── {agentId}.json               # One file per agent
 ├── schedules/
 │   └── {scheduleId}.json                # One file per schedule
+├── drafts/
+│   └── {artifactId}/
+│       ├── artifact.json                # Mutable; the only file an edit rewrites
+│       ├── snapshots/{rev}.json         # Written once per sent revision, never rewritten
+│       └── dispatches.jsonl             # Append-only send log
 ├── projects/
 │   ├── projects.json                    # Project registry
 │   ├── workspaces.json                  # Workspace registry
@@ -559,6 +564,18 @@ These small files are not validated as full Zod schemas but are persisted under 
 
 ---
 
+## 8. Drafts
+
+**Location:** `$PASEO_HOME/drafts/{artifactId}/` — see [Directory layout](#directory-layout).
+
+Host-persisted prompts that belong to no session. The code word is `artifact`; see **Draft** in [glossary.md](glossary.md) for why, and do not rename it.
+
+The three-file split exists for incremental sync, not tidiness. An edit rewrites only `artifact.json`; a snapshot is written once and never touched again; dispatches only ever append. **No index file is persisted** — one would be rewritten on every edit, which is the "re-send everything" behaviour the layout avoids. The search projection is rebuilt in memory at boot instead.
+
+Both the wire schema and the on-disk schema are the same `z.object` (`packages/protocol/src/draft/types.ts`), and neither is strict. Unknown keys are stripped, not rejected: on the wire that is the compatibility contract, and on disk it matters more, because daemon storage has no migrations and a strict reader would skip a file written by a newer daemon. A draft that silently vanishes is the failure this store exists to prevent — which is also why a directory the daemon cannot **read** fails initialization instead of reading as empty. `bootstrap` catches that and stops advertising `server_info.features.drafts`, so the client says the host does not support drafts rather than showing an empty list.
+
+`artifact.version` is the optimistic-concurrency token: a write carries the `baseVersion` it was typed against and is rejected if the record has moved on. Snapshot revision numbers are `artifact.version` at send time, so `snapshots/0007.json` is what the agent received when the draft was at v7, whatever it says now.
+
 ## Client-side stores (App)
 
 These live in React Native `AsyncStorage` or browser `IndexedDB`, not on the daemon filesystem.
@@ -605,6 +622,28 @@ source code, prompts, and tool output; encrypted-at-rest storage is a separate s
   createModalDraft: DraftRecord | null
 }
 ```
+
+### Draft Checkpoint Store
+
+**AsyncStorage key:** `@paseo:draft-checkpoints` (version 1) on native, IndexedDB on web
+
+```typescript
+{
+  version: 1,
+  checkpoints: {
+    serverId: string,
+    artifactId: string,
+    body?: string,          // only if still owed to the daemon
+    title?: string | null,  // null means "cleared", absent means "unchanged"
+    baseVersion: number,    // the version the text was typed against
+    updatedAt: number,
+  }[]
+}
+```
+
+Text between the keystroke and the daemon's acknowledgement for the **Drafts** library above — not the composer's Draft Store, which is the previous section and a different thing entirely. That one is right for a message you are about to send: finalized records expire after five minutes and clearing one blanks the text. A document nobody has touched in an hour still has to be there, so this store has no expiry and drops an entry only once the daemon has accepted it.
+
+Only fields still owed are stored, which is why `title` distinguishes absent from `null`: writing a saved title back would claim an edit nobody made. Reopening a draft seeds the editor from the checkpoint and re-queues it at its own `baseVersion`, so a draft changed elsewhere meanwhile surfaces as a conflict rather than an overwrite. Client-side stores carry migrations (the daemon's do not); bump the version and add one, because dropping a checkpoint loses work.
 
 ### Attachment Store (Web)
 

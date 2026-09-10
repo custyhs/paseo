@@ -79,6 +79,7 @@ not retain non-Git directories.
 | `server/orchestration-skills/`  | Bundled catalog, host selection, convergence, and skill-directory transactions |
 | `server/relay-transport.ts`     | Outbound relay connection with E2E encryption                                  |
 | `server/schedule/`              | Cron-based scheduled agents                                                    |
+| `server/drafts/`                | Host-persisted prompt library at `$PASEO_HOME/drafts/`, with send snapshots    |
 
 ### `packages/protocol` — Wire schemas and shared protocol types
 
@@ -415,6 +416,7 @@ $PASEO_HOME/
 ├── projects/workspaces.json                    # Workspace registry
 ├── projects/icons/                             # Custom project icon images
 ├── schedules/                                  # Scheduled-agent definitions and runs
+├── drafts/{artifact-id}/                       # Draft library: record, send snapshots, dispatch log
 ├── config.json                                 # Daemon config (mutable)
 ├── daemon-keypair.json                         # Daemon identity for relay/E2EE
 ├── push-tokens.json                            # Mobile push tokens
