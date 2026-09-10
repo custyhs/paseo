@@ -1,4 +1,4 @@
-import type { DraftCheckpointStore } from "./checkpoint";
+import type { DraftCheckpoint, DraftCheckpointStore } from "./checkpoint";
 import type { ArtifactDetail } from "./model";
 import { DraftVersionConflictError, type DraftsSource } from "./source";
 
@@ -39,8 +39,13 @@ interface PendingEdit {
 export interface DraftSaveLoop {
   onChangeText: (next: string) => void;
   onChangeTitle: (next: string) => void;
-  /** Writes anything outstanding now, without waiting for the debounce. */
-  flush: () => Promise<void>;
+  /**
+   * Writes anything outstanding now, without waiting for the debounce, and
+   * resolves with the state it settled on. A caller that needs the daemon to
+   * hold the text — sending does — has to read that state rather than assume
+   * the write landed.
+   */
+  flush: () => Promise<DraftSaveState>;
   hasPendingText: () => boolean;
   /** Adopts a version this client advanced by other means, such as sending. */
   noteVersion: (version: number) => void;
@@ -61,6 +66,13 @@ export function createDraftSaveLoop(input: {
   onSaved?: (artifact: ArtifactDetail) => void;
   now?: () => number;
   debounceMs?: number;
+  /**
+   * Text this client owed the daemon when it last went away. Adopting it is
+   * what makes a checkpoint a safety net rather than a write-only log: the
+   * editor seeds its fields from the same record, and the write retries from
+   * here.
+   */
+  recover?: DraftCheckpoint;
 }): DraftSaveLoop {
   const { source, checkpoints, serverId, artifactId, onState, onSaved } = input;
   const now = input.now ?? Date.now;
@@ -68,9 +80,16 @@ export function createDraftSaveLoop(input: {
 
   let version = input.version;
   let pending: PendingEdit | null = null;
-  let inFlight = false;
+  /** The write on the wire, so a second caller can await it instead of racing it. */
+  let inFlight: Promise<void> | null = null;
   let disposed = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let state: DraftSaveState = { status: "saved" };
+
+  const setState = (next: DraftSaveState) => {
+    state = next;
+    onState(next);
+  };
 
   const cancelTimer = () => {
     if (timer === null) return;
@@ -78,39 +97,54 @@ export function createDraftSaveLoop(input: {
     timer = null;
   };
 
-  const flush = async (): Promise<void> => {
-    if (inFlight) return;
-    inFlight = true;
-    onState({ status: "saving" });
-    try {
-      while (pending !== null) {
-        const sent = pending;
-        let saved: ArtifactDetail;
-        try {
-          saved = await source.update({ artifactId, baseVersion: version, ...sent });
-        } catch (error) {
-          // The text stays queued and stays checkpointed. Retrying is the next
-          // keystroke, the next flush, or reconnecting — never a lost paragraph.
-          if (error instanceof DraftVersionConflictError) {
-            const remote = await source.get(artifactId).catch(() => null);
-            onState(remote ? { status: "conflict", remote } : { status: "unsaved" });
-          } else {
-            onState({ status: "unsaved" });
-          }
-          return;
+  const drain = async (): Promise<void> => {
+    setState({ status: "saving" });
+    while (pending !== null) {
+      const sent = pending;
+      let saved: ArtifactDetail;
+      try {
+        saved = await source.update({ artifactId, baseVersion: version, ...sent });
+      } catch (error) {
+        // The text stays queued and stays checkpointed. Retrying is the next
+        // keystroke, the next flush, or reconnecting — never a lost paragraph.
+        if (error instanceof DraftVersionConflictError) {
+          const remote = await source.get(artifactId).catch(() => null);
+          setState(remote ? { status: "conflict", remote } : { status: "unsaved" });
+        } else {
+          setState({ status: "unsaved" });
         }
-        version = saved.version;
-        onSaved?.(saved);
-        // Newer keystrokes may have landed during the await; those are still
-        // owed to the daemon, so only retire the edit we actually sent. Every
-        // keystroke replaces the object, so identity is the whole comparison.
-        if (pending === sent) pending = null;
+        return;
       }
-      await checkpoints.clear(serverId, artifactId);
-      onState({ status: "saved" });
-    } finally {
-      inFlight = false;
+      version = saved.version;
+      onSaved?.(saved);
+      // Newer keystrokes may have landed during the await; those are still
+      // owed to the daemon, so only retire the edit we actually sent. Every
+      // keystroke replaces the object, so identity is the whole comparison.
+      if (pending === sent) pending = null;
     }
+    await checkpoints.clear(serverId, artifactId);
+    setState({ status: "saved" });
+  };
+
+  /**
+   * Awaiting the write already on the wire rather than returning early is what
+   * makes this usable as a barrier. Returning early would tell a send the queue
+   * was empty while the daemon was still being told about the last keystroke,
+   * and the snapshot would freeze the older body.
+   */
+  const flush = async (): Promise<DraftSaveState> => {
+    // Awaiting the write is what retires it, so this settles rather than spins.
+    for (let writing = inFlight; writing !== null; writing = inFlight) {
+      await writing;
+    }
+    if (pending === null) return state;
+    inFlight = drain();
+    try {
+      await inFlight;
+    } finally {
+      inFlight = null;
+    }
+    return state;
   };
 
   /**
@@ -130,13 +164,25 @@ export function createDraftSaveLoop(input: {
       baseVersion: version,
       updatedAt: now(),
     });
-    onState({ status: "unsaved" });
+    setState({ status: "unsaved" });
     cancelTimer();
     timer = setTimeout(() => {
       timer = null;
       void flush();
     }, debounceMs);
   };
+
+  if (input.recover) {
+    // The version the text was typed against, not the one the editor was
+    // handed. Writing it under a newer version would overwrite whoever moved
+    // the draft on in the meantime; under this one the daemon says so, and the
+    // conflict bar gets its turn.
+    version = input.recover.baseVersion;
+    queue({
+      ...(input.recover.body !== undefined ? { body: input.recover.body } : {}),
+      ...("title" in input.recover ? { title: input.recover.title ?? null } : {}),
+    });
+  }
 
   return {
     onChangeText(next: string) {
@@ -161,7 +207,7 @@ export function createDraftSaveLoop(input: {
       pending = null;
       version = remote.version;
       await checkpoints.clear(serverId, artifactId);
-      onState({ status: "saved" });
+      setState({ status: "saved" });
     },
 
     async overwrite(remote: ArtifactDetail) {

@@ -75,6 +75,11 @@ const en = {
     toAgent: "Sent to {{title}} — open it",
     toNewAgent: "Sent. A new session is starting.",
     failed: "Could not send: {{error}}",
+    /** Refused before anything was captured, so the two cases need different advice. */
+    blocked: {
+      unsaved: "Not sent: this host does not have your latest text yet. It will retry.",
+      conflict: "Not sent: this draft changed elsewhere. Reload or overwrite first.",
+    },
     dismiss: "Dismiss",
   },
   snapshot: {
@@ -171,6 +176,10 @@ const zhCN: typeof en = {
     toAgent: "已发送给 {{title}} —— 点击打开",
     toNewAgent: "已发送。新会话正在启动。",
     failed: "发送失败:{{error}}",
+    blocked: {
+      unsaved: "未发送:这台主机还没有你最新的文本,稍后会重试。",
+      conflict: "未发送:这份草稿在别处被改过,先重新载入或覆盖。",
+    },
     dismiss: "关闭",
   },
   snapshot: {

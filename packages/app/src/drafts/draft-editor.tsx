@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View, type PressableStateCallbackType } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { EditingTextInput } from "@/components/ui/text-input";
 import { useDraftsSource } from "./context";
 import {
@@ -21,7 +22,8 @@ import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { SendSheet } from "./send-sheet";
 import { SnapshotSheet } from "./snapshot-sheet";
 import type { SendTarget } from "./source";
-import { DraftCheckpointStore } from "./checkpoint";
+import { DraftCheckpointStore, recoveredDraftValues } from "./checkpoint";
+import { DraftSendBlockedError, sendRevision } from "./send-revision";
 import { draftCheckpointStorage } from "./checkpoint-storage";
 import { createDraftSaveLoop, type DraftSaveState } from "./save-loop";
 
@@ -176,9 +178,23 @@ const SentConfirmation = memo(function SentConfirmation({
 });
 
 /**
- * The editor both surfaces share. A and C are two views of one store, so they
- * have to be one component — otherwise the two would drift and "same draft,
- * different places" would stop being true in the details that matter.
+ * A send that never started and a send that failed on the wire need different
+ * advice: one is "it will retry", the other is "go and look at what changed".
+ */
+function describeSendFailure(error: unknown, t: TFunction): string {
+  if (error instanceof DraftSendBlockedError) return t(`drafts.sent.blocked.${error.reason}`);
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
+/**
+ * Nothing renders until the checkpoints are in memory.
+ *
+ * `EditingTextInput` reads `initialValue` once, at mount, so a checkpoint that
+ * arrives after the first paint can never reach the field. Text the daemon
+ * never accepted would then be invisible while still being owed — the shape of
+ * loss this feature exists to prevent. The read is one storage key, and the
+ * store is shared, so on every open after the first it is already resolved.
  */
 export function DraftEditor({
   artifact,
@@ -187,6 +203,30 @@ export function DraftEditor({
   artifact: ArtifactDetail;
   serverId: string;
 }) {
+  const [ready, setReady] = useState(checkpoints.isLoaded());
+
+  useEffect(() => {
+    if (ready) return;
+    let active = true;
+    void (async () => {
+      await checkpoints.load();
+      if (active) setReady(true);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [ready]);
+
+  if (!ready) return null;
+  return <DraftEditorFields artifact={artifact} serverId={serverId} />;
+}
+
+/**
+ * The editor both surfaces share. A and C are two views of one store, so they
+ * have to be one component — otherwise the two would drift and "same draft,
+ * different places" would stop being true in the details that matter.
+ */
+function DraftEditorFields({ artifact, serverId }: { artifact: ArtifactDetail; serverId: string }) {
   const { t } = useTranslation();
   const source = useDraftsSource();
   const plannedLabel = usePlannedLabel();
@@ -201,6 +241,18 @@ export function DraftEditor({
   // The loop owns everything about writing: the debounce, the coalescing, the
   // local checkpoint and what each failure means. It is a plain object so the
   // rules can be tested without a renderer — see `offline.test.ts`.
+  // Read once per mount, before the loop adopts it and clears it.
+  const recovered = useMemo(
+    () => checkpoints.get(serverId, artifact.id),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [serverId, artifact.id],
+  );
+  const seeded = useMemo(
+    () => recoveredDraftValues({ artifact, checkpoint: recovered }),
+    // Only the mount's values: the fields are uncontrolled from here on.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [serverId, artifact.id],
+  );
   const loop = useMemo(
     () =>
       createDraftSaveLoop({
@@ -210,16 +262,13 @@ export function DraftEditor({
         artifactId: artifact.id,
         version: artifact.version,
         onState: setSaveState,
+        recover: recovered,
       }),
     // Deliberately not `artifact.version`: the loop tracks the version itself
     // from here on, and rebuilding it mid-edit would drop queued text.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [source, serverId, artifact.id],
   );
-
-  useEffect(() => {
-    void checkpoints.load();
-  }, []);
 
   // A pending edit must not die with the component; write it on the way out. A
   // draft nobody wrote in is discarded on the same path, so opening the editor
@@ -283,19 +332,22 @@ export function DraftEditor({
       setSendError(null);
       const send = async () => {
         try {
-          const result = await source.send({ artifactId: artifact.id, target });
-          loop.noteVersion(result.artifact.version);
+          await sendRevision({ loop, source, artifactId: artifact.id, target });
           setJustSent(target);
         } catch (error) {
           // A send that failed has to say so. The snapshot and a `failed`
           // dispatch are already on disk, so the lineage is right either way —
           // what was missing was the user finding out.
-          setSendError(error instanceof Error ? error.message : String(error));
+          //
+          // A send blocked before it started is the other half: nothing was
+          // captured, and saying which of the two happened is the difference
+          // between "retry" and "go and look at what changed".
+          setSendError(describeSendFailure(error, t));
         }
       };
       void send();
     },
-    [artifact.id, loop, source],
+    [artifact.id, loop, source, t],
   );
 
   const dismissSent = useCallback(() => setJustSent(null), []);
@@ -336,7 +388,7 @@ export function DraftEditor({
         */}
         <ThemedTextInput
           testID="draft-title"
-          initialValue={artifact.title ?? ""}
+          initialValue={seeded.title}
           onChangeText={onChangeTitle}
           placeholder={t("drafts.editor.titlePlaceholder")}
           style={styles.title}
@@ -395,7 +447,7 @@ export function DraftEditor({
       <ThemedTextInput
         multiline
         testID="draft-body"
-        initialValue={artifact.body}
+        initialValue={seeded.body}
         onChangeText={onChangeText}
         placeholder={t("drafts.editor.bodyPlaceholder")}
         style={styles.input}
