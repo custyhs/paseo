@@ -26,3 +26,32 @@ export function resolveDraftsListEmptyState(input: {
   if (input.capableHostCount === 0) return "unsupported";
   return input.hasSearch ? "no-matches" : "empty";
 }
+
+/** Where a query matched a draft, and the text around the match if it is not current. */
+export interface DraftSearchMatch {
+  /** The revision the words were found in, or null when the current text has them. */
+  rev: number | null;
+  /** Only meaningful with a `rev`: the client holds no copy of that revision. */
+  excerpt?: string;
+}
+
+/**
+ * Which hit a row should explain itself with.
+ *
+ * A current-text hit outranks an old-revision one — the words are still there,
+ * and the row's own preview shows them. Among revisions the earliest wins, so
+ * the row names where the phrase entered the draft rather than the last place
+ * it survived.
+ */
+export function pickSearchMatch(
+  hits: readonly { rev: number | null; excerpt?: string }[],
+): DraftSearchMatch | null {
+  let best: DraftSearchMatch | null = null;
+  for (const hit of hits) {
+    if (hit.rev === null) return { rev: null };
+    if (best === null || (best.rev !== null && hit.rev < best.rev)) {
+      best = { rev: hit.rev, excerpt: hit.excerpt };
+    }
+  }
+  return best;
+}

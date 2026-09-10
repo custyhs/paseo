@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { resolveDraftsListEmptyState } from "./drafts-screen-state";
+import { pickSearchMatch, resolveDraftsListEmptyState } from "./drafts-screen-state";
 
 describe("what the Drafts list says when it is empty", () => {
   const base = {
@@ -53,5 +53,30 @@ describe("a host that is merely offline", () => {
         visibleDraftCount: 0,
       }),
     ).not.toBe("unsupported");
+  });
+});
+
+describe("which hit a row explains itself with", () => {
+  test("current text outranks an old revision", () => {
+    expect(pickSearchMatch([{ rev: 7, excerpt: "…in revision seven…" }, { rev: null }])).toEqual({
+      rev: null,
+    });
+  });
+
+  test("the earliest revision wins, with its own excerpt", () => {
+    expect(
+      pickSearchMatch([
+        { rev: 7, excerpt: "…seven…" },
+        { rev: 2, excerpt: "…two…" },
+      ]),
+    ).toEqual({ rev: 2, excerpt: "…two…" });
+  });
+
+  test("no hits is no match", () => {
+    expect(pickSearchMatch([])).toBeNull();
+  });
+
+  test("a revision hit without an excerpt still identifies the revision", () => {
+    expect(pickSearchMatch([{ rev: 4 }])).toEqual({ rev: 4, excerpt: undefined });
   });
 });

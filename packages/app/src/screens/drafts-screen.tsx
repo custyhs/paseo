@@ -18,7 +18,9 @@ import { useSessionStore } from "@/stores/session-store";
 import { DraftEditor } from "@/drafts/draft-editor";
 import { draftDisplayTitle, plannedTargetKey, type ArtifactDetail } from "@/drafts/model";
 import {
+  pickSearchMatch,
   resolveDraftsListEmptyState,
+  type DraftSearchMatch,
   type DraftsListEmptyState,
 } from "@/screens/drafts-screen-state";
 import { describeWorkspace, useAllWorkspaces } from "@/drafts/workspaces";
@@ -56,15 +58,15 @@ const DraftListRow = memo(function DraftListRow({
   artifact,
   isSelected,
   planLabels,
-  matchedRev,
+  match,
   onSelect,
   onToggleArchived,
 }: {
   artifact: ArtifactDetail;
   isSelected: boolean;
   planLabels: string[];
-  /** Set when the query matched only an older revision, not the current text. */
-  matchedRev: number | null;
+  /** Where the running query matched, or null when no query is running. */
+  match: DraftSearchMatch | null;
   onSelect: (artifactId: string) => void;
   onToggleArchived: (artifactId: string) => void;
 }) {
@@ -79,7 +81,12 @@ const DraftListRow = memo(function DraftListRow({
     [onToggleArchived, artifact.id],
   );
   const style = useMemo(() => rowStyleFor(isSelected), [isSelected]);
-  const snippet = artifact.body.trim().replace(/\s+/g, " ").slice(0, 120);
+  const matchedRev = match?.rev ?? null;
+  // The row has to show the words that matched. When they only exist in a sent
+  // revision the current body does not contain them, and a preview of text the
+  // query never touched reads as a false positive.
+  const preview = matchedRev !== null && match?.excerpt ? match.excerpt : artifact.body;
+  const snippet = preview.trim().replace(/\s+/g, " ").slice(0, 120);
   const isArchived = artifact.archivedAt !== null;
   const showArchive = isHovered || isNative || isCompact;
 
@@ -218,13 +225,19 @@ export function DraftsScreen() {
    */
   const matched = useMemo(() => {
     if (!search.trim()) return null;
-    const byArtifact = new Map<string, number | null>();
+    const hitsByArtifact = new Map<string, { rev: number | null; excerpt?: string }[]>();
     for (const { serverId, hit } of searchHits) {
       const key = `${serverId}:${hit.artifactId}`;
-      const rev = hit.where.kind === "snapshot" ? hit.where.rev : null;
-      // A current-text hit outranks an old-revision one: the words are still there.
-      if (rev === null || !byArtifact.has(key)) byArtifact.set(key, rev);
+      const bucket = hitsByArtifact.get(key);
+      const entry = {
+        rev: hit.where.kind === "snapshot" ? hit.where.rev : null,
+        excerpt: hit.excerpt,
+      };
+      if (bucket) bucket.push(entry);
+      else hitsByArtifact.set(key, [entry]);
     }
+    const byArtifact = new Map<string, DraftSearchMatch | null>();
+    for (const [key, hits] of hitsByArtifact) byArtifact.set(key, pickSearchMatch(hits));
     return byArtifact;
   }, [search, searchHits]);
 
@@ -233,7 +246,7 @@ export function DraftsScreen() {
       matched === null || matched.has(`${entry.serverId}:${entry.artifact.id}`),
     [matched],
   );
-  const matchedRev = useCallback(
+  const matchFor = useCallback(
     (entry: HostedDraft) => matched?.get(`${entry.serverId}:${entry.artifact.id}`) ?? null,
     [matched],
   );
@@ -392,7 +405,7 @@ export function DraftsScreen() {
                   artifact={entry.artifact}
                   isSelected={entry.artifact.id === selectedId}
                   planLabels={labelFor(entry.artifact)}
-                  matchedRev={matchedRev(entry)}
+                  match={matchFor(entry)}
                   onSelect={setSelectedId}
                   onToggleArchived={onToggleArchived}
                 />
@@ -409,7 +422,7 @@ export function DraftsScreen() {
                 artifact={entry.artifact}
                 isSelected={entry.artifact.id === selectedId}
                 planLabels={labelFor(entry.artifact)}
-                matchedRev={matchedRev(entry)}
+                match={matchFor(entry)}
                 onSelect={setSelectedId}
                 onToggleArchived={onToggleArchived}
               />
