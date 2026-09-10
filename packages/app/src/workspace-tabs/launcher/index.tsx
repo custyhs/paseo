@@ -204,6 +204,7 @@ export function useWorkspaceTabLaunchCatalog(input: {
         // and naming one here would render a hint for a key that does nothing.
         disabled: false,
         panelKind: "scratchpad",
+        toggleTarget: null,
         launch: launchSelection(BUILT_IN_SELECTIONS.scratchpad),
       },
     };
