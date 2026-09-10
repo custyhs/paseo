@@ -14,8 +14,13 @@ import { useDraftHosts } from "@/drafts/use-host-source";
 import { HostFilter } from "@/components/hosts/host-filter";
 import { ALL_HOSTS_OPTION_ID } from "@/components/hosts/host-picker-constants";
 import { useHosts } from "@/runtime/host-runtime";
+import { useSessionStore } from "@/stores/session-store";
 import { DraftEditor } from "@/drafts/draft-editor";
 import { draftDisplayTitle, plannedTargetKey, type ArtifactDetail } from "@/drafts/model";
+import {
+  resolveDraftsListEmptyState,
+  type DraftsListEmptyState,
+} from "@/screens/drafts-screen-state";
 import { describeWorkspace, useAllWorkspaces } from "@/drafts/workspaces";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { isNative } from "@/constants/platform";
@@ -133,6 +138,12 @@ const DraftListRow = memo(function DraftListRow({
   );
 });
 
+const EMPTY_HINT_KEY: Record<Exclude<DraftsListEmptyState, null | "unsupported">, string> = {
+  "no-host": "drafts.list.empty",
+  "no-matches": "drafts.list.noMatches",
+  empty: "drafts.list.empty",
+};
+
 function archiveButtonStyle({ pressed }: PressableStateCallbackType) {
   return [styles.archiveButton, pressed && styles.pressed];
 }
@@ -157,6 +168,9 @@ export function DraftsScreen() {
   const workspaces = useAllWorkspaces();
   const draftHosts = useDraftHosts();
   const hostProfiles = useHosts();
+  const handshakenHostCount = useSessionStore(
+    (state) => Object.values(state.sessions).filter((session) => session.serverInfo).length,
+  );
   const { drafts } = useDraftsAcrossHosts(draftHosts);
   const [search, setSearch] = useState("");
   const searchHits = useDraftSearch(draftHosts, search);
@@ -277,6 +291,17 @@ export function DraftsScreen() {
 
   const onToggleShowArchived = useCallback(() => setShowArchived((shown) => !shown), []);
 
+  // Only hosts that finished a handshake count as connected: a configured host
+  // whose daemon is down has told us nothing about what it supports, so blaming
+  // its version for the empty list would send the user to upgrade something
+  // that is merely off. `draftHosts` is the subset that advertises drafts.
+  const emptyState = resolveDraftsListEmptyState({
+    capableHostCount: draftHosts.length,
+    connectedHostCount: handshakenHostCount,
+    hasSearch: search.trim().length > 0,
+    visibleDraftCount: groups.length,
+  });
+
   const archivedCount = useMemo(() => {
     const allowed = new Set(visibleHosts.map((host) => host.serverId));
     return drafts.filter(
@@ -320,6 +345,9 @@ export function DraftsScreen() {
           accessibilityRole="button"
           testID="drafts-new-draft"
           onPress={onCreate}
+          // No capable host means nothing to write into, and a button that
+          // silently does nothing reads as a broken button.
+          disabled={createHost === null}
           style={newButtonStyle}
         >
           <Text style={styles.newButtonLabel}>{t("drafts.actions.newDraft")}</Text>
@@ -343,11 +371,16 @@ export function DraftsScreen() {
         </View>
       ) : null}
       <ScrollView testID="drafts-list">
-        {groups.length === 0 ? (
+        {emptyState !== null ? (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyHint}>
-              {search ? t("drafts.list.noMatches") : t("drafts.list.empty")}
-            </Text>
+            {emptyState === "unsupported" ? (
+              <>
+                <Text style={styles.emptyTitle}>{t("drafts.empty.unsupportedTitle")}</Text>
+                <Text style={styles.emptyHint}>{t("drafts.empty.unsupportedHint")}</Text>
+              </>
+            ) : (
+              <Text style={styles.emptyHint}>{t(EMPTY_HINT_KEY[emptyState])}</Text>
+            )}
           </View>
         ) : (
           groups.map(([day, entries]) => (
@@ -502,6 +535,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   tag: { fontSize: theme.fontSize.sm, color: theme.colors.foregroundMuted },
   sentTag: { fontSize: theme.fontSize.sm, color: theme.colors.accentBright },
-  emptyState: { padding: theme.spacing[4] },
+  emptyState: { padding: theme.spacing[4], gap: theme.spacing[1] },
+  emptyTitle: { fontSize: theme.fontSize.base, color: theme.colors.foreground },
   emptyHint: { fontSize: theme.fontSize.sm, color: theme.colors.foregroundMuted },
 }));

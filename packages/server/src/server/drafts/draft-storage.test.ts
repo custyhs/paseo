@@ -27,6 +27,36 @@ async function reopen() {
   return store;
 }
 
+describe("storage that cannot be read", () => {
+  /**
+   * `bootstrap` turns the capability off when opening the store fails, and
+   * `server_info.features.drafts` is how a client is told drafts are
+   * unavailable rather than broken. That only works if opening actually fails:
+   * treating an unreadable directory as an empty one advertises a working
+   * feature over drafts the user cannot see, which is the silent-disappearance
+   * failure this store exists to prevent.
+   */
+  test("a path that is not a directory fails to initialize", async () => {
+    const file = path.join(baseDir, "not-a-directory");
+    await fs.writeFile(file, "");
+    const store = new DraftStorage(file, silentLogger);
+    await expect(store.initialize()).rejects.toThrow();
+  });
+
+  test("a directory that does not exist yet is not a failure", async () => {
+    const store = new DraftStorage(path.join(baseDir, "nothing-here-yet"), silentLogger);
+    await expect(store.initialize()).resolves.toBeUndefined();
+    expect(await store.list()).toEqual([]);
+  });
+
+  test("a store whose directory appears later still writes into it", async () => {
+    const store = new DraftStorage(path.join(baseDir, "created-on-demand"), silentLogger);
+    await store.initialize();
+    const created = await store.create({ body: "first" });
+    expect((await store.get(created.id))?.body).toBe("first");
+  });
+});
+
 describe("artifact persistence", () => {
   test("an untitled, unscoped draft survives a restart byte for byte", async () => {
     const store = newStore();

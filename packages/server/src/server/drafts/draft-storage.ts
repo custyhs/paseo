@@ -442,8 +442,15 @@ export class DraftStorage {
       entries = (await fs.readdir(this.baseDir, { withFileTypes: true }))
         .filter((entry) => entry.isDirectory() && entry.name.startsWith(ARTIFACT_ID_PREFIX))
         .map((entry) => entry.name);
-    } catch {
-      return; // No store yet. Creating a draft makes the directory.
+    } catch (error) {
+      // Absence is the first run: creating a draft makes the directory. Any
+      // other reason — not a directory, no permission — means the drafts on
+      // disk cannot be read, and reporting that as an empty store would show
+      // the user an empty list where their work should be. `bootstrap` catches
+      // this and stops advertising the capability, so the client says the host
+      // does not support drafts instead of implying there are none.
+      if ((error as NodeJS.ErrnoException | null)?.code === "ENOENT") return;
+      throw error;
     }
 
     for (const id of entries) {
