@@ -16,6 +16,9 @@ import { describe, expect, it } from "vitest";
 import { buildAgentStreamRenderModel } from "./model";
 import { createStreamPresentation } from "./presentation";
 import { createReadingAnchor } from "./reading-anchor";
+import { layoutStream } from "./layout";
+import { resolveStreamRenderStrategy } from "./strategy-resolver";
+import { resolveAssistantTurnForkBoundary } from "./turn-boundary";
 
 const runtime = {
   paseo: {},
@@ -96,7 +99,13 @@ function toolCall(callId: string, name: string): ToolCallItem {
 }
 
 function pluginData(items: StreamItem[]): unknown[] {
-  return items.flatMap((item) => (item.kind === "plugin" ? [item.data] : []));
+  return items.flatMap((item) => {
+    if (item.kind === "plugin") return [item.data];
+    if (item.kind === "assistant_message") {
+      return item.pluginBody?.map((bodyItem) => bodyItem.data) ?? [];
+    }
+    return [];
+  });
 }
 
 const presentationOptions = {
@@ -152,6 +161,117 @@ describe("whole-message Markdown presentation", () => {
 });
 
 describe("stream presentation through installed plugins", () => {
+  it.each(["web", "android"])(
+    "preserves the source turn's copy and fork actions with custom bodies on %s",
+    (platform) => {
+      const transform = installedTransform(
+        installProbe(
+          "assistant_message",
+          'item.text.includes("$") || item.text.includes("mermaid")',
+        ),
+      );
+      const cases = [
+        ["$x^2$"],
+        ["```mermaid\ngraph LR; A-->B\n```"],
+        ["Checking the calculation.", "$x^2$"],
+        ["$x^2$", "The result is ready."],
+        ["tool", "$x^2$"],
+        ["$x^2$", "tool"],
+      ];
+      for (const contents of cases) {
+        const source: StreamItem[] = contents.map((text, index) =>
+          text === "tool"
+            ? { ...toolCall(`call-${index}`, "read"), turnId: "turn-1" }
+            : {
+                kind: "assistant_message",
+                id: `assistant-${index}`,
+                messageId: `provider-${index}`,
+                turnId: "turn-1",
+                timelineCursor: { epoch: "epoch-1", seq: index + 1 },
+                timestamp: new Date(1000),
+                text,
+              },
+        );
+        const latestAssistant = source.findLast((item) => item.kind === "assistant_message")!;
+        const projected = createStreamPresentation()({
+          ...presentationOptions,
+          display: "full",
+          isTurnActive: false,
+          tail: source,
+          head: [],
+          transform,
+        });
+        const strategy = resolveStreamRenderStrategy({ platform, isMobileBreakpoint: false });
+        const layout = layoutStream({
+          strategy,
+          isTurnActive: false,
+          history: strategy.orderTail(projected.tail),
+          liveHead: [],
+          timingByItemId: new Map(),
+        });
+        const footers = [
+          ...layout.history.flatMap((row) => (row.completedFooter ? [row.completedFooter] : [])),
+          ...(layout.auxiliaryTurnFooter ? [layout.auxiliaryTurnFooter] : []),
+        ];
+
+        expect(footers.map((footer) => footer.itemId)).toEqual([latestAssistant.id]);
+        const footer = footers[0]!;
+        expect(strategy.collectAssistantResponseContent(footer.items, footer.startIndex)).toBe(
+          contents.filter((text) => text !== "tool").join("\n\n"),
+        );
+        expect(
+          resolveAssistantTurnForkBoundary({
+            items: footer.items,
+            startIndex: footer.startIndex,
+            supportsTimelineCursor: true,
+          }),
+        ).toEqual({
+          boundaryCursor: latestAssistant.timelineCursor,
+          boundaryMessageId: latestAssistant.messageId,
+        });
+      }
+    },
+  );
+
+  it("folds work before a custom final reply and reveals custom intermediate messages", () => {
+    const source = hydrateStreamState([
+      {
+        event: {
+          type: "timeline",
+          provider: "claude",
+          item: { type: "user_message", messageId: "prompt-1", text: "Calculate this" },
+        },
+        timestamp: new Date(1000),
+      },
+      { event: assistant("Intermediate $x$", "commentary"), timestamp: new Date(2000) },
+      { event: assistant("Final $x^2$", "reply"), timestamp: new Date(3000) },
+    ]);
+    source.splice(2, 0, toolCall("read", "read"));
+    const present = createStreamPresentation();
+    const input = {
+      ...presentationOptions,
+      display: "collapseTurns" as const,
+      isTurnActive: false,
+      tail: source,
+      head: [],
+      transform: installedTransform(installProbe("assistant_message")),
+    };
+
+    const collapsed = present(input);
+    expect(collapsed.tail.map((item) => item.id)).toEqual(["prompt-1", "reply"]);
+    expect(pluginData(collapsed.tail)).toEqual([{ text: "Final $x^2$", phase: "complete" }]);
+    expect(collapsed.turns.hostIdByFoldedMessageId.get("commentary")).toBe("prompt-1");
+    expect(collapsed.turns.hostIdByHiddenRowId.get("reply")).toBeUndefined();
+
+    const expanded = present({ ...input, expandedTurnHostIds: new Set(["prompt-1"]) });
+    expect(expanded.tail.map((item) => item.id)).toEqual(source.map((item) => item.id));
+    expect(pluginData(expanded.tail)).toEqual([
+      { text: "Intermediate $x$", phase: "complete" },
+      { text: "Final $x^2$", phase: "complete" },
+    ]);
+    expect(expanded.turns.nestedItemIds.has("commentary")).toBe(true);
+  });
+
   it("offers every source tool call to an installed transformer in Overview mode", () => {
     const calls = [toolCall("call-1", "bash"), toolCall("call-2", "read")];
     const rendered = createStreamPresentation()({

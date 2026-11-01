@@ -1165,16 +1165,6 @@ export const AssistantMessage = memo(function AssistantMessage({
     [message, phase, renderedMessage.capped],
   );
 
-  const assistantContainerStyle = useMemo(
-    () => [
-      assistantMessageStylesheet.container,
-      (spacing === "compactTop" || spacing === "compactBoth") &&
-        assistantMessageStylesheet.containerCompactTop,
-      (spacing === "compactBottom" || spacing === "compactBoth") &&
-        assistantMessageStylesheet.containerCompactBottom,
-    ],
-    [spacing],
-  );
   const revealDataSet = useMemo(
     () =>
       isRenderProfileEnabled()
@@ -1191,12 +1181,7 @@ export const AssistantMessage = memo(function AssistantMessage({
     setAssistantMessageHeight({ markdown: revealedMessage, ...event.nativeEvent.layout });
   });
   return (
-    <View
-      testID="assistant-message"
-      dataSet={revealDataSet}
-      style={assistantContainerStyle}
-      onLayout={measureMessage}
-    >
+    <AssistantMessageContainer dataSet={revealDataSet} spacing={spacing} onLayout={measureMessage}>
       <MarkdownRenderer
         text={revealedMessage}
         agentCommands
@@ -1213,9 +1198,38 @@ export const AssistantMessage = memo(function AssistantMessage({
           {t("agentStream.messageCapped", { bytes: fullMessageByteLength })}
         </Text>
       ) : null}
-    </View>
+    </AssistantMessageContainer>
   );
 });
+
+/** The host owns message spacing and Find's text scope, including custom plugin bodies. */
+export function AssistantMessageContainer({
+  children,
+  spacing = "default",
+  dataSet = MESSAGE_TEXT_DATASET,
+  onLayout,
+}: {
+  children: ReactNode;
+  spacing?: AssistantMessageProps["spacing"];
+  dataSet?: React.ComponentProps<typeof View>["dataSet"];
+  onLayout?: (event: LayoutChangeEvent) => void;
+}) {
+  const style = useMemo(
+    () => [
+      assistantMessageStylesheet.container,
+      (spacing === "compactTop" || spacing === "compactBoth") &&
+        assistantMessageStylesheet.containerCompactTop,
+      (spacing === "compactBottom" || spacing === "compactBoth") &&
+        assistantMessageStylesheet.containerCompactBottom,
+    ],
+    [spacing],
+  );
+  return (
+    <View testID="assistant-message" dataSet={dataSet} style={style} onLayout={onLayout}>
+      {children}
+    </View>
+  );
+}
 
 interface SpeakMessageProps {
   message: string;

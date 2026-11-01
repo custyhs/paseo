@@ -134,7 +134,7 @@ export default function contribute(client) {
 }`;
 }
 
-async function withDirectoryPlugin(options: {
+export async function withDirectoryPlugin(options: {
   pluginId: string;
   source: string;
   run: () => Promise<void>;
@@ -248,7 +248,7 @@ export async function interactWithStreamingCard(page: Page): Promise<void> {
     1,
   );
   await expect(page.getByRole("button", { name: "Card clicks 1", exact: true })).toBeVisible();
-  await expect(page.getByTestId("assistant-message")).toHaveCount(0);
+  await expect(page.getByTestId("assistant-message")).toHaveCount(1);
 }
 
 export async function expectWholeCompletedCard(page: Page): Promise<void> {
@@ -256,7 +256,7 @@ export async function expectWholeCompletedCard(page: Page): Promise<void> {
     1,
   );
   await expect(page.getByText(ASSISTANT_TEXT, { exact: true })).toBeVisible();
-  await expect(page.getByTestId("assistant-message")).toHaveCount(0);
+  await expect(page.getByTestId("assistant-message")).toHaveCount(1);
 }
 
 export async function expectBothConsecutiveTools(page: Page): Promise<void> {

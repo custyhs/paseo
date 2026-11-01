@@ -1265,7 +1265,11 @@ function WebStreamViewport(props: StreamRenderInput & { isMobileBreakpoint: bool
         key={item.id}
         data-history-row-id={item.id}
         data-message-id={getStreamItemMessageId(item)}
-        data-plugin-row={item.kind === "plugin" ? "true" : undefined}
+        data-plugin-row={
+          item.kind === "plugin" || (item.kind === "assistant_message" && item.pluginBody)
+            ? "true"
+            : undefined
+        }
         style={streamRowStyle}
       >
         <StreamRowContent
@@ -1283,7 +1287,11 @@ function WebStreamViewport(props: StreamRenderInput & { isMobileBreakpoint: bool
         key={item.id}
         data-history-row-id={item.id}
         data-message-id={getStreamItemMessageId(item)}
-        data-plugin-row={item.kind === "plugin" ? "true" : undefined}
+        data-plugin-row={
+          item.kind === "plugin" || (item.kind === "assistant_message" && item.pluginBody)
+            ? "true"
+            : undefined
+        }
         style={streamRowStyle}
       >
         <StreamRowContent
@@ -1346,7 +1354,12 @@ function WebStreamViewport(props: StreamRenderInput & { isMobileBreakpoint: bool
                     data-index={virtualRow.index}
                     data-history-row-id={item.id}
                     data-message-id={getStreamItemMessageId(item)}
-                    data-plugin-row={item.kind === "plugin" ? "true" : undefined}
+                    data-plugin-row={
+                      item.kind === "plugin" ||
+                      (item.kind === "assistant_message" && item.pluginBody)
+                        ? "true"
+                        : undefined
+                    }
                     ref={measureVirtualizedRowElement}
                     style={renderVirtualRowStyle(virtualRow.start)}
                   >

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_CONTENT_MAX_WIDTH } from "@/styles/theme";
 import type { StreamItem } from "@/types/stream";
+import { projectPluginTimelineItems } from "@/plugins/timeline/projection";
 import {
   setAssistantMessageHeight,
   clearAssistantMessageHeightEstimateCache,
@@ -133,6 +134,29 @@ describe("splitWebVirtualizedHistory", () => {
 });
 
 describe("estimateStreamItemHeight", () => {
+  it("does not reuse native Markdown measurements for plugin-rendered assistant bodies", () => {
+    const source: StreamItem = {
+      kind: "assistant_message",
+      id: "custom-body",
+      text: "A formula: $x^2$",
+      timestamp: createTimestamp(2),
+    };
+    setAssistantMessageHeight({ markdown: source.text, width: 608, height: 640 });
+    const [projected] = projectPluginTimelineItems([source], ({ sourceId }) => [
+      {
+        type: "plugin",
+        pluginId: "math",
+        id: sourceId,
+        kind: "formula",
+        version: 1,
+        data: {},
+      },
+    ]);
+    expect(estimateStreamItemHeight({ item: projected!, contentMaxWidth: 608 })).toBe(120);
+    expect(estimateStreamItemHeight({ item: source, contentMaxWidth: 608 })).toBe(640);
+    clearAssistantMessageHeightEstimateCache();
+  });
+
   it("uses compact estimates for collapsed tool sequence rows", () => {
     expect(
       estimateStreamItemHeight({

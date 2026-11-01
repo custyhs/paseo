@@ -640,7 +640,7 @@ work inside it. See the maintained [composer pill example](../plugin-examples/lo
 
 Timeline transformers and renderers are client contributions. The daemon's canonical rows and
 built-in projection stay unchanged. The app transforms each source item while building the render
-model, for both fetched history and live events, before native Markdown splitting and Overview
+model, for both fetched history and live events, before Markdown rendering and Overview
 tool grouping. Assistant callbacks receive the accumulated source text, never display fragments.
 Live assistant messages use `phase: "streaming"`; committing to history makes them `"complete"`.
 Paseo memoizes by source-item reference and phase and derives replacement IDs from source identity, so
@@ -648,7 +648,11 @@ streaming updates preserve mounted component identity.
 
 `query.itemType` selects one public `AgentTimelineItem.type`. The callback owns any detailed
 recognition and returns plain plugin item objects. `undefined` keeps the source item, `items`
-replaces it, and an empty array removes it. Output `data` must be JSON-compatible. Paseo adds the
+replaces its presentation, and an empty array removes it. Nonempty assistant-message results replace
+only the body: Paseo retains the original message identity and text for Copy turn, Fork, Find and turn
+collapse. Multiple results share that assistant row and its single footer. Plugins own their body's
+streaming presentation; the host's Markdown pacing and height cache do not apply to custom bodies.
+Other source types become plugin rows. Output `data` must be JSON-compatible. Paseo adds the
 runtime plugin ID, preserves the source timeline cursor and identity, validates renderer data with
 its Zod schema, and mounts the component inside the normal plugin runtime and error boundary. An
 optional output `id` distinguishes several stable replacements from the same source item; its output

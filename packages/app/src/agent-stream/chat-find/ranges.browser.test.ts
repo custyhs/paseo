@@ -115,6 +115,17 @@ it("counts only drawn text in a plugin row, including an opened popover", () => 
   expect(findRenderedMatches(row, "needle")).toHaveLength(2);
 });
 
+it("keeps a custom assistant body's matches separate from its footer and hidden text", () => {
+  const row = pluginRow(
+    '<div data-message-text="true"><div>first</div><div>second</div><div>visible <span>needle</span></div><div hidden>hidden needle</div><span style="opacity:0">transparent needle</span></div><div>footer needle<button>copy needle</button></div>',
+  );
+
+  expect(findRenderedMatches(row, "firstsecond")).toEqual([]);
+  expect(findRenderedMatches(row, "needle").map((range) => range.toString())).toEqual(["needle"]);
+  expect(findMessageMatches(row.parentElement, "message-1", "visible needle")).toHaveLength(1);
+  expect(findRenderedMatches(row, "footer")).toEqual([]);
+});
+
 it("keeps text around nested plugin blocks in separate occurrences", () => {
   const row = pluginRow("<div>alpha <div>details</div>beta</div><div>gamma <div></div>delta</div>");
   expect(findRenderedMatches(row, "alpha beta")).toEqual([]);

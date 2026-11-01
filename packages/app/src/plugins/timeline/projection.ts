@@ -100,7 +100,7 @@ function transformSourceItem(
     sourceId: item.id,
   });
   if (transformed === undefined) return [item];
-  return transformed.map((pluginItem) => {
+  const pluginItems = transformed.map((pluginItem) => {
     const projected: PluginTimelineStreamItem = {
       kind: "plugin",
       id: `${pluginItem.pluginId}/${pluginItem.id}`,
@@ -116,6 +116,11 @@ function transformSourceItem(
     if (item.turnId) projected.turnId = item.turnId;
     return projected;
   });
+  // A custom body does not change who said the message. Keep the original row so
+  // copy, fork, turn collapse and source-message navigation share its identity.
+  return item.kind === "assistant_message" && pluginItems.length > 0
+    ? [{ ...item, pluginBody: pluginItems }]
+    : pluginItems;
 }
 
 export function projectPluginTimelineItems(

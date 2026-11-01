@@ -9,6 +9,7 @@ import {
 export const DEFAULT_WEB_PARTIAL_VIRTUALIZATION_THRESHOLD = 100;
 export const DEFAULT_WEB_MOUNTED_RECENT_STREAM_ITEMS = DEFAULT_MOUNTED_RECENT_STREAM_ITEMS;
 const COLLAPSED_TOOL_SEQUENCE_ROW_HEIGHT_ESTIMATE = 40;
+const PLUGIN_TIMELINE_ROW_HEIGHT_ESTIMATE = 120;
 
 type BottomAnchorE2ETestGlobals = typeof globalThis & {
   __PASEO_E2E_WEB_PARTIAL_VIRTUALIZATION_THRESHOLD?: unknown;
@@ -56,6 +57,9 @@ export function estimateStreamItemHeight({
     case "user_message":
       return item.images && item.images.length > 0 ? 220 : 96;
     case "assistant_message":
+      if (item.pluginBody) {
+        return item.pluginBody.length * PLUGIN_TIMELINE_ROW_HEIGHT_ESTIMATE;
+      }
       return (
         estimateAssistantMessageHeightFromCache({
           markdown: item.text,
@@ -73,7 +77,7 @@ export function estimateStreamItemHeight({
     case "compaction":
       return 72;
     default:
-      return 120;
+      return PLUGIN_TIMELINE_ROW_HEIGHT_ESTIMATE;
   }
 }
 

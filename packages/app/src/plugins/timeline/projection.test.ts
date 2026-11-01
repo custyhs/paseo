@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { StreamItem } from "@/types/stream";
+import { getStreamItemMessageId, type AssistantMessageItem, type StreamItem } from "@/types/stream";
 import type { TimelineItemTransform } from "./model";
 import { projectPluginTimelineItems } from "./projection";
 
@@ -14,6 +14,65 @@ function thought(text: string, status: "loading" | "ready" = "loading"): StreamI
 }
 
 describe("plugin timeline projection", () => {
+  it("keeps one source assistant row when a transformer returns several body items", () => {
+    const source: AssistantMessageItem = {
+      kind: "assistant_message",
+      id: "assistant-1",
+      messageId: "provider-1",
+      turnId: "turn-1",
+      timelineCursor: { epoch: "epoch-1", seq: 3 },
+      timestamp: new Date("2026-01-01T00:00:00.000Z"),
+      text: "Formula $x^2$ followed by a diagram.",
+    };
+    const transform: TimelineItemTransform = ({ sourceId }) =>
+      ["formula", "diagram"].map((part) => ({
+        type: "plugin",
+        id: `${sourceId}/${part}`,
+        pluginId: "markdown",
+        kind: "body",
+        version: 1,
+        data: { part },
+      }));
+
+    const projected = projectPluginTimelineItems([source], transform);
+
+    expect(projected).toMatchObject([
+      {
+        ...source,
+        pluginBody: [
+          { kind: "plugin", id: "markdown/assistant-1/formula", sourceId: source.id },
+          { kind: "plugin", id: "markdown/assistant-1/diagram", sourceId: source.id },
+        ],
+      },
+    ]);
+    expect(projected.map(getStreamItemMessageId)).toEqual([source.id]);
+    expect(projectPluginTimelineItems([source], transform)[0]).toBe(projected[0]);
+    expect(source.pluginBody).toBeUndefined();
+    expect(projectPluginTimelineItems([source], () => [])).toEqual([]);
+    expect(projectPluginTimelineItems([source], () => undefined)[0]).toBe(source);
+  });
+
+  it("leaves canonical plugin rows outside assistant-message semantics", () => {
+    const source: StreamItem = {
+      kind: "plugin",
+      id: "notice-1",
+      pluginId: "notifications",
+      pluginItemId: "notice-1",
+      itemKind: "notice",
+      version: 1,
+      data: { text: "Background task completed" },
+      timestamp: new Date("2026-01-01T00:00:00.000Z"),
+    };
+    let calls = 0;
+    const projected = projectPluginTimelineItems([source], () => {
+      calls += 1;
+      return [];
+    });
+
+    expect(projected[0]).toBe(source);
+    expect(calls).toBe(0);
+  });
+
   it("does not expose mutable tool detail from stream state", () => {
     const detail = { type: "read" as const, filePath: "/repo/original.ts" };
     const source: StreamItem = {

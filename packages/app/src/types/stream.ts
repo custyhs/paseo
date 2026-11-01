@@ -713,7 +713,8 @@ export interface AssistantMessageItem {
   timelineCursor?: TimelinePosition;
   text: string;
   timestamp: Date;
-  /** Display-only fields, assigned after source-item plugin transforms. */
+  /** Presentation-only body override. The source message still owns turn actions and identity. */
+  pluginBody?: PluginTimelineStreamItem[];
 }
 
 export interface TimelinePosition {
@@ -810,7 +811,7 @@ export interface CompactionItem {
 export interface PluginTimelineStreamItem {
   kind: "plugin";
   id: string;
-  /** The id of the stream item a timeline transformer replaced; set only by projection. */
+  /** The source stream item whose presentation a transformer replaced; set only by projection. */
   sourceId?: string;
   timelineCursor?: TimelinePosition;
   turnId?: string;

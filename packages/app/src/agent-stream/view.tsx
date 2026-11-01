@@ -31,6 +31,7 @@ import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
 import { openExplorerSidebarView } from "@/workspace-tabs/explorer-sidebar";
 import {
   AssistantMessage,
+  AssistantMessageContainer,
   SpeakMessage,
   UserMessage,
   Notification,
@@ -40,6 +41,7 @@ import {
   MessageOuterSpacingProvider,
   type InlinePathTarget,
 } from "@/components/message";
+import { MarkdownBlockStack } from "@/components/markdown/block-stack";
 import { PlanCard } from "@/components/plan-card";
 import { getStreamItemMessageId, type StreamItem } from "@/types/stream";
 import type { PendingMessageSubmission } from "@/composer/submission/model";
@@ -760,6 +762,22 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
 
     const renderAssistantMessageItem = useCallback(
       (layoutItem: StreamLayoutItem, item: Extract<StreamItem, { kind: "assistant_message" }>) => {
+        if (item.pluginBody) {
+          return (
+            <AssistantMessageContainer spacing={layoutItem.assistantSpacing}>
+              <MarkdownBlockStack>
+                {item.pluginBody.map((bodyItem) => (
+                  <PluginTimelineItemView
+                    key={bodyItem.id}
+                    agentId={agentId}
+                    item={bodyItem}
+                    serverId={resolvedServerId}
+                  />
+                ))}
+              </MarkdownBlockStack>
+            </AssistantMessageContainer>
+          );
+        }
         return (
           <AssistantFileLinkResolverProvider
             client={client}

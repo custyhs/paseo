@@ -23,13 +23,12 @@ export function findMessageMatches(
 
 function renderedTextGroups(row: HTMLElement): Text[][] {
   const groups: Text[][] = [];
-  // A plugin renderer owns the DOM of the message it replaced and sets no markers, so the
-  // whole row is searched and each div (a React Native View or Text) bounds a match.
+  // Plugin bodies use unmarked React Native views as block boundaries. Assistant
+  // bodies have a host text scope; standalone plugin rows may have no such marker.
   const pluginRow = row.dataset.pluginRow === "true";
   const blocks = pluginRow ? `${BLOCKS},div` : BLOCKS;
-  const contents = pluginRow
-    ? [row]
-    : row.querySelectorAll<HTMLElement>('[data-message-text="true"]');
+  const textScopes = row.querySelectorAll<HTMLElement>('[data-message-text="true"]');
+  const contents = pluginRow && textScopes.length === 0 ? [row] : textScopes;
   for (const content of contents) {
     let group: { block: Element; texts: Text[] } | undefined;
     const walker = document.createTreeWalker(
